@@ -1,0 +1,131 @@
+// FieldFix Prisma Database Schema (PostgreSQL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CUSTOMER
+  TECHNICIAN
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  ACCEPTED
+  DISPATCHED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
+  FAILED
+}
+
+model User {
+  id               String       @id @default(uuid())
+  email            String       @unique
+  phone            String       @unique
+  passwordHash     String
+  name             String
+  role             Role         @default(CUSTOMER)
+  avatarUrl        String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Relationships
+  customerBookings Booking[]    @relation("CustomerBookings")
+  techBookings     Booking[]    @relation("TechnicianBookings")
+  reviewsGiven     Review[]     @relation("ReviewsGiven")
+  reviewsReceived  Review[]     @relation("ReviewsReceived")
+  technicianProfile TechnicianProfile?
+
+  @@map("users")
+}
+
+model TechnicianProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills          String[]
+  isAvailable     Boolean  @default(true)
+  currentLat      Float?
+  currentLng      Float?
+  rating          Float    @default(5.0)
+  totalJobs       Int      @default(0)
+
+  @@map("technician_profiles")
+}
+
+model ServiceCategory {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  icon        String?
+  basePrice   Float
+  bookings    Booking[]
+
+  @@map("service_categories")
+}
+
+model Booking {
+  id             String          @id @default(uuid())
+  customerId     String
+  customer       User            @relation("CustomerBookings", fields: [customerId], references: [id])
+  technicianId   String?
+  technician     User?           @relation("TechnicianBookings", fields: [technicianId], references: [id])
+  categoryId     String
+  category       ServiceCategory @relation(fields: [categoryId], references: [id])
+  
+  status         BookingStatus   @default(PENDING)
+  address        String
+  latitude       Float
+  longitude      Float
+  scheduledAt    DateTime
+  totalAmount    Float
+  
+  payment        Payment?
+  review         Review?
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@map("bookings")
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  bookingId     String        @unique
+  booking       Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount        Float
+  provider      String        // e.g., "RAZORPAY", "STRIPE"
+  transactionId String        @unique
+  status        PaymentStatus @default(PENDING)
+  createdAt     DateTime      @default(now())
+
+  @@map("payments")
+}
+
+model Review {
+  id           String   @id @default(uuid())
+  bookingId    String   @unique
+  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  reviewerId   String
+  reviewer     User     @relation("ReviewsGiven", fields: [reviewerId], references: [id])
+  targetId     String
+  target       User     @relation("ReviewsReceived", fields: [targetId], references: [id])
+  rating       Int
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  @@map("reviews")
+}
