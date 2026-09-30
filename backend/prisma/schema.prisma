@@ -1,43 +1,26 @@
-// FieldFix Prisma Database Schema (PostgreSQL)
+// FieldFix Prisma Database Schema (SQLite for dev, swap to PostgreSQL for prod)
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-enum Role {
-  CUSTOMER
-  TECHNICIAN
-  ADMIN
-}
-
-enum BookingStatus {
-  PENDING
-  ACCEPTED
-  DISPATCHED
-  IN_PROGRESS
-  COMPLETED
-  CANCELLED
-}
-
-enum PaymentStatus {
-  PENDING
-  PAID
-  REFUNDED
-  FAILED
-}
+// NOTE: SQLite doesn't support enums natively, so we use String fields
+// Role: "CUSTOMER" | "TECHNICIAN" | "ADMIN"
+// BookingStatus: "PENDING" | "ACCEPTED" | "DISPATCHED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
+// PaymentStatus: "PENDING" | "PAID" | "REFUNDED" | "FAILED"
 
 model User {
   id               String       @id @default(uuid())
   email            String       @unique
-  phone            String       @unique
+  phone            String       @default("")
   passwordHash     String
   name             String
-  role             Role         @default(CUSTOMER)
+  role             String       @default("CUSTOMER")
   avatarUrl        String?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
@@ -56,7 +39,7 @@ model TechnicianProfile {
   id              String   @id @default(uuid())
   userId          String   @unique
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skills          String[]
+  skills          String   @default("[]")
   isAvailable     Boolean  @default(true)
   currentLat      Float?
   currentLng      Float?
@@ -86,7 +69,7 @@ model Booking {
   categoryId     String
   category       ServiceCategory @relation(fields: [categoryId], references: [id])
   
-  status         BookingStatus   @default(PENDING)
+  status         String          @default("PENDING")
   address        String
   latitude       Float
   longitude      Float
@@ -107,9 +90,9 @@ model Payment {
   bookingId     String        @unique
   booking       Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   amount        Float
-  provider      String        // e.g., "RAZORPAY", "STRIPE"
+  provider      String
   transactionId String        @unique
-  status        PaymentStatus @default(PENDING)
+  status        String        @default("PENDING")
   createdAt     DateTime      @default(now())
 
   @@map("payments")

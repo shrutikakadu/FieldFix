@@ -1,13 +1,30 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
-import { isAuthenticated } from './services/auth';
+import TechniciansPage from './pages/TechniciansPage';
+import BookingDetailPage from './pages/BookingDetailPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import CustomerDashboard from './pages/CustomerDashboard';
+import { isAuthenticated, getStoredUser } from './services/auth';
 
-// Protected Route wrapper — redirects to login if not authenticated
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+// Protected Route — redirects to login if not authenticated
+function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
   if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
+
+  // Role-based access
+  if (allowedRoles) {
+    const user = getStoredUser();
+    if (user && !allowedRoles.includes(user.role)) {
+      // Redirect to correct dashboard
+      if (user.role === 'ADMIN') return <Navigate to="/admin/dashboard" replace />;
+      return <Navigate to="/customer/dashboard" replace />;
+    }
+  }
+
   return <>{children}</>;
 }
 
@@ -15,22 +32,75 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public: Login Page */}
+        {/* Public Pages */}
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
 
-        {/* Protected: Dashboard */}
+        {/* Admin Dashboard & Subpages (Protected - ADMIN only) */}
         <Route
-          path="/dashboard"
+          path="/admin/dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={['ADMIN']}>
               <Dashboard />
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin/technicians"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <TechniciansPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/bookings/:id"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <BookingDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <ProtectedRoute allowedRoles={['ADMIN']}>
+              <AnalyticsPage />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Default redirect: go to dashboard (which will bounce to login if not auth'd) */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        {/* Customer Dashboard (Protected - CUSTOMER only) */}
+        <Route
+          path="/customer/dashboard"
+          element={
+            <ProtectedRoute allowedRoles={['CUSTOMER']}>
+              <CustomerDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Legacy redirect: /dashboard → role-based redirect */}
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <RoleRedirect />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Catch all → Landing */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
+}
+
+// Helper: redirect to correct dashboard based on user role
+function RoleRedirect() {
+  const user = getStoredUser();
+  if (user?.role === 'ADMIN') return <Navigate to="/admin/dashboard" replace />;
+  return <Navigate to="/customer/dashboard" replace />;
 }

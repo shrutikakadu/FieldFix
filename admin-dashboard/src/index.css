@@ -4,7 +4,8 @@
 
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 antialiased font-sans;
+    @apply bg-sage-50 text-slate-900 antialiased font-sans;
+    font-family: 'Inter', sans-serif;
   }
 }
 

@@ -9,12 +9,15 @@
     "mobile-app"
   ],
   "scripts": {
+    "dev": "concurrently \"npm run start:backend\" \"npm run start:web\"",
     "start:backend": "npm --prefix backend run dev",
+    "start:web": "npm --prefix admin-dashboard run dev",
     "start:admin": "npm --prefix admin-dashboard run dev",
     "start:mobile": "npm --prefix mobile-app run start",
     "start:mobile:web": "npm --prefix mobile-app run web",
     "build:backend": "npm --prefix backend run build",
-    "build:admin": "npm --prefix admin-dashboard run build"
+    "build:admin": "npm --prefix admin-dashboard run build",
+    "build:web": "npm --prefix admin-dashboard run build"
   },
   "keywords": [
     "field-service",
@@ -27,5 +30,8 @@
     "postgresql"
   ],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
 }

@@ -16,7 +16,9 @@ docs/
     └── Appendix_B.md                 # SRS Appendix B: Database Schemas & Data Dictionary
 ```
 
-## SRS Appendix B Status
+## SRS Deliverables Status
 - [x] **Prisma Database Schema**: Defined in [`backend/prisma/schema.prisma`](file:///c:/Users/USER/Desktop/SE_lab/FieldFix/backend/prisma/schema.prisma)
-- [ ] **ER Diagram Visualizer**: Export pending from dbdiagram.io / Prisma visualizer into `docs/diagrams/er_diagram.png`
-- [ ] **State Transition Diagram**: Draft state-transition diagram for job status lifecycle (`PENDING` -> `ACCEPTED` -> `DISPATCHED` -> `IN_PROGRESS` -> `COMPLETED` / `CANCELLED`)
+- [x] **Seed Data & Initial Users**: Implemented in [`backend/prisma/seed.ts`](file:///c:/Users/USER/Desktop/SE_lab/FieldFix/backend/prisma/seed.ts)
+- [x] **ER Diagram & Data Dictionary**: Available in [`docs/ER_DIAGRAM.md`](file:///c:/Users/USER/Desktop/SE_lab/FieldFix/docs/ER_DIAGRAM.md)
+- [x] **State Transition Lifecycle**: Available in [`docs/STATE_TRANSITION.md`](file:///c:/Users/USER/Desktop/SE_lab/FieldFix/docs/STATE_TRANSITION.md)
+- [x] **Admin Dispatch UI & Subpages**: Implemented in `admin-dashboard/src/pages/` (Landing, Login, Register, Dispatch Board, Technicians, Booking Details, Analytics, Customer Portal)

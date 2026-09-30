@@ -221,7 +221,29 @@ export default function Dashboard() {
         </div>
 
         {/* Status Indicators & User Profile */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-3">
+          {/* Quick Nav Links */}
+          <div className="hidden xl:flex items-center space-x-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+            <button
+              onClick={() => navigate('/admin/dashboard')}
+              className="px-3 py-1.5 bg-sky-600 text-white font-bold rounded-lg shadow-sm"
+            >
+              Dispatch Board
+            </button>
+            <button
+              onClick={() => navigate('/admin/technicians')}
+              className="px-3 py-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition font-medium"
+            >
+              Technicians
+            </button>
+            <button
+              onClick={() => navigate('/admin/analytics')}
+              className="px-3 py-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition font-medium"
+            >
+              Analytics
+            </button>
+          </div>
+
           {/* Socket.IO Connection Pill */}
           <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs">
             <span className={`relative flex h-2.5 w-2.5`}>
@@ -261,6 +283,28 @@ export default function Dashboard() {
           </div>
         </div>
       </header>
+
+      {/* Sub-Header Mobile/Tablet Nav Bar */}
+      <div className="xl:hidden bg-slate-900 border-b border-slate-800 px-6 py-2.5 flex items-center space-x-2 overflow-x-auto text-xs">
+        <button
+          onClick={() => navigate('/admin/dashboard')}
+          className="px-3 py-1.5 bg-sky-600 text-white font-bold rounded-lg shadow-sm whitespace-nowrap"
+        >
+          Dispatch Board
+        </button>
+        <button
+          onClick={() => navigate('/admin/technicians')}
+          className="px-3 py-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition font-medium whitespace-nowrap"
+        >
+          Technicians
+        </button>
+        <button
+          onClick={() => navigate('/admin/analytics')}
+          className="px-3 py-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition font-medium whitespace-nowrap"
+        >
+          Analytics & Charts
+        </button>
+      </div>
 
       {/* ================= MAIN DASHBOARD BODY ================= */}
       <main className="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto space-y-8">
@@ -698,6 +742,17 @@ export default function Dashboard() {
                 className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition"
               >
                 Close Preview
+              </button>
+              <button
+                onClick={() => {
+                  const bId = selectedBooking.id;
+                  setSelectedBooking(null);
+                  navigate(`/admin/bookings/${bId}`);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold shadow-glow-sky transition flex items-center space-x-1.5"
+              >
+                <span>View Full Ticket Page</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>

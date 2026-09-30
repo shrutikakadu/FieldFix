@@ -1,6 +1,7 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import apiRouter from './routes/api';
+import authRouter from './routes/auth';
 
 const app: Express = express();
 
@@ -11,6 +12,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // REST API Routes
 app.use('/api', apiRouter);
+app.use('/api/auth', authRouter);
+
 
 // Global Error Handler
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
