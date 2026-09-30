@@ -1,20 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Calendar,
-  Clock,
   MapPin,
   User,
   Phone,
   Mail,
-  ShieldCheck,
-  CheckCircle2,
-  AlertTriangle,
   CreditCard,
   Wrench,
   Navigation,
-  FileText,
   Activity
 } from 'lucide-react';
 

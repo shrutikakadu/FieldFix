@@ -7,6 +7,8 @@ interface AuthResponse {
     name: string;
     email: string;
     role: string;
+    phone?: string;
+    technicianProfile?: any;
   };
 }
 
@@ -20,10 +22,27 @@ export const registerUser = async (
   email: string,
   phone: string,
   password: string,
-  role: string
+  role: string,
+  technicianVerifiedId?: string,
+  skills?: string[],
+  city?: string,
 ): Promise<AuthResponse> => {
-  const response = await apiClient.post('/auth/register', { name, email, phone, password, role });
+  const response = await apiClient.post('/auth/register', {
+    name, email, phone, password, role,
+    ...(technicianVerifiedId ? { technicianVerifiedId } : {}),
+    ...(skills ? { skills } : {}),
+    ...(city ? { city } : {}),
+  });
   return response.data;
+};
+
+/** Fetch all technicians (optionally filtered by skill/city) */
+export const getTechnicians = async (params?: { skill?: string; city?: string; available?: boolean }) => {
+  const queryStr = params
+    ? '?' + Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')
+    : '';
+  const response = await apiClient.get(`/auth/technicians${queryStr}`);
+  return response.data.technicians as any[];
 };
 
 export const logoutAdmin = () => {
@@ -38,15 +57,10 @@ export const getStoredToken = (): string | null => {
 export const getStoredUser = () => {
   const userStr = localStorage.getItem('fieldfix_admin_user');
   if (userStr) {
-    try {
-      return JSON.parse(userStr);
-    } catch {
-      return null;
-    }
+    try { return JSON.parse(userStr); }
+    catch { return null; }
   }
   return null;
 };
 
-export const isAuthenticated = (): boolean => {
-  return !!getStoredToken();
-};
+export const isAuthenticated = (): boolean => !!getStoredToken();

@@ -36,15 +36,21 @@ model User {
 }
 
 model TechnicianProfile {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skills          String   @default("[]")
-  isAvailable     Boolean  @default(true)
-  currentLat      Float?
-  currentLng      Float?
-  rating          Float    @default(5.0)
-  totalJobs       Int      @default(0)
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  technicianVerifiedId String  @unique             // Govt-issued / trade-board ID (mandatory)
+  skills              String   @default("[]")       // JSON array of service categories
+  specialization      String   @default("")         // Primary specialization label
+  bio                 String   @default("")
+  city                String   @default("Bangalore")
+  experienceYears     Int      @default(1)
+  photoUrl            String?                       // Profile photo URL
+  isAvailable         Boolean  @default(true)
+  currentLat          Float?   @default(12.9716)
+  currentLng          Float?   @default(77.5946)
+  rating              Float    @default(5.0)
+  totalJobs           Int      @default(0)
 
   @@map("technician_profiles")
 }

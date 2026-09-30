@@ -1,24 +1,24 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Wrench, Mail, Lock, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Loader2, User, Shield, Sparkles } from 'lucide-react';
+import { Wrench, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, User, Shield, Wrench as TechIcon } from 'lucide-react';
 import { loginAdmin } from '../services/auth';
 
-type UserRole = 'CUSTOMER' | 'ADMIN';
+type UserRole = 'CUSTOMER' | 'TECHNICIAN' | 'ADMIN';
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   
-  const roleParam = searchParams.get('role');
-  const [selectedRole, setSelectedRole] = useState<UserRole>(
-    roleParam?.toUpperCase() === 'ADMIN' ? 'ADMIN' : 'CUSTOMER'
-  );
+  const roleParam = searchParams.get('role')?.toUpperCase();
+  const initialRole: UserRole = roleParam === 'ADMIN' ? 'ADMIN' : roleParam === 'TECHNICIAN' ? 'TECHNICIAN' : 'CUSTOMER';
+
+  const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
   
   const [email, setEmail] = useState(
-    selectedRole === 'ADMIN' ? 'admin@fieldfix.com' : 'customer@fieldfix.com'
+    initialRole === 'ADMIN' ? 'admin@fieldfix.com' : initialRole === 'TECHNICIAN' ? 'tech@fieldfix.com' : 'customer@fieldfix.com'
   );
   const [password, setPassword] = useState(
-    selectedRole === 'ADMIN' ? 'admin123' : 'customer123'
+    initialRole === 'ADMIN' ? 'admin123' : initialRole === 'TECHNICIAN' ? 'tech123' : 'customer123'
   );
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +31,9 @@ export default function LoginPage() {
     if (role === 'ADMIN') {
       setEmail('admin@fieldfix.com');
       setPassword('admin123');
+    } else if (role === 'TECHNICIAN') {
+      setEmail('tech@fieldfix.com');
+      setPassword('tech123');
     } else {
       setEmail('customer@fieldfix.com');
       setPassword('customer123');
@@ -51,7 +54,7 @@ export default function LoginPage() {
 
       // Check if the user's role matches the selected role
       if (response.user.role !== selectedRole) {
-        setError(`This account is registered as ${response.user.role}. Please switch to the ${response.user.role === 'ADMIN' ? 'Admin' : 'Customer'} tab above.`);
+        setError(`This account is registered as ${response.user.role}. Please select the ${response.user.role} tab above.`);
         setIsLoading(false);
         return;
       }
@@ -63,6 +66,8 @@ export default function LoginPage() {
       // Redirect based on role
       if (response.user.role === 'ADMIN') {
         navigate('/admin/dashboard', { replace: true });
+      } else if (response.user.role === 'TECHNICIAN') {
+        navigate('/technician/dashboard', { replace: true });
       } else {
         navigate('/customer/dashboard', { replace: true });
       }
@@ -100,46 +105,61 @@ export default function LoginPage() {
             Sign In to FieldFix
           </h1>
           <p className="text-sage-600 text-sm mt-1">
-            Choose your account type below to continue
+            Choose your account role below to enter your workspace
           </p>
         </div>
 
         {/* Card */}
         <div className="bg-white/90 backdrop-blur-xl border border-sage-200 rounded-2xl p-7 shadow-xl">
-          {/* ===== 2 SEPARATE ROLE TABS ===== */}
+          {/* ===== 3 SEPARATE ROLE TABS ===== */}
           <div className="mb-6">
             <label className="block text-xs font-bold text-sage-600 mb-2 uppercase tracking-wider text-center">
-              Select Account Type
+              Select Login Role
             </label>
-            <div className="grid grid-cols-2 gap-2 bg-sage-100 p-1.5 rounded-xl border border-sage-200">
+            <div className="grid grid-cols-3 gap-1.5 bg-sage-100 p-1.5 rounded-xl border border-sage-200">
               {/* Customer Option */}
               <button
                 type="button"
                 onClick={() => handleRoleChange('CUSTOMER')}
-                className={`flex items-center justify-center space-x-2 py-3 px-3 rounded-lg text-sm font-bold transition-all ${
+                className={`flex flex-col sm:flex-row items-center justify-center space-x-1 py-2.5 px-2 rounded-lg text-xs font-bold transition-all ${
                   selectedRole === 'CUSTOMER'
                     ? 'bg-sage-500 text-white shadow-md scale-[1.02]'
                     : 'text-sage-700 hover:bg-sage-200/70'
                 }`}
                 id="tab-customer"
               >
-                <User className="w-4 h-4" />
+                <User className="w-3.5 h-3.5" />
                 <span>Customer</span>
+              </button>
+
+              {/* Technician Option */}
+              <button
+                type="button"
+                onClick={() => handleRoleChange('TECHNICIAN')}
+                className={`flex flex-col sm:flex-row items-center justify-center space-x-1 py-2.5 px-2 rounded-lg text-xs font-bold transition-all ${
+                  selectedRole === 'TECHNICIAN'
+                    ? 'bg-emerald-700 text-white shadow-md scale-[1.02]'
+                    : 'text-sage-700 hover:bg-sage-200/70'
+                }`}
+                id="tab-technician"
+              >
+                <TechIcon className="w-3.5 h-3.5" />
+                <span>Technician</span>
               </button>
 
               {/* Admin Option */}
               <button
                 type="button"
                 onClick={() => handleRoleChange('ADMIN')}
-                className={`flex items-center justify-center space-x-2 py-3 px-3 rounded-lg text-sm font-bold transition-all ${
+                className={`flex flex-col sm:flex-row items-center justify-center space-x-1 py-2.5 px-2 rounded-lg text-xs font-bold transition-all ${
                   selectedRole === 'ADMIN'
-                    ? 'bg-sage-800 text-white shadow-md scale-[1.02]'
+                    ? 'bg-sage-900 text-white shadow-md scale-[1.02]'
                     : 'text-sage-700 hover:bg-sage-200/70'
                 }`}
                 id="tab-admin"
               >
-                <Shield className="w-4 h-4" />
-                <span>Admin / Staff</span>
+                <Shield className="w-3.5 h-3.5" />
+                <span>Admin</span>
               </button>
             </div>
           </div>
@@ -147,14 +167,16 @@ export default function LoginPage() {
           {/* Role Status Tag */}
           <div className={`mb-5 p-3 rounded-xl flex items-center justify-between text-xs font-semibold ${
             selectedRole === 'ADMIN'
-              ? 'bg-sage-800 text-sage-100'
+              ? 'bg-sage-900 text-white'
+              : selectedRole === 'TECHNICIAN'
+              ? 'bg-emerald-900 text-emerald-100 border border-emerald-700'
               : 'bg-sage-100 text-sage-800 border border-sage-200'
           }`}>
             <span className="flex items-center space-x-1.5">
-              {selectedRole === 'ADMIN' ? <Shield className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5 text-sage-600" />}
-              <span>Signing in as: <strong>{selectedRole === 'ADMIN' ? 'Admin Portal' : 'Customer Account'}</strong></span>
+              {selectedRole === 'ADMIN' ? <Shield className="w-3.5 h-3.5" /> : selectedRole === 'TECHNICIAN' ? <TechIcon className="w-3.5 h-3.5 text-emerald-400" /> : <User className="w-3.5 h-3.5 text-sage-600" />}
+              <span>Signing in as: <strong>{selectedRole === 'ADMIN' ? 'Admin Portal' : selectedRole === 'TECHNICIAN' ? 'Technician Dispatch' : 'Customer Account'}</strong></span>
             </span>
-            <span className="text-[10px] uppercase tracking-wider opacity-80">Real Database Auth</span>
+            <span className="text-[10px] uppercase tracking-wider opacity-80">Neon DB</span>
           </div>
 
           {/* Error Message */}
@@ -178,7 +200,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                  placeholder={selectedRole === 'ADMIN' ? 'admin@fieldfix.com' : 'customer@fieldfix.com'}
+                  placeholder={selectedRole === 'ADMIN' ? 'admin@fieldfix.com' : selectedRole === 'TECHNICIAN' ? 'tech@fieldfix.com' : 'customer@fieldfix.com'}
                   autoComplete="email"
                   className="w-full bg-sage-50/70 border border-sage-200 focus:border-sage-500 focus:ring-2 focus:ring-sage-200 rounded-xl pl-11 pr-4 py-3 text-sm text-sage-900 placeholder-sage-400 focus:outline-none transition-all"
                 />
@@ -218,7 +240,9 @@ export default function LoginPage() {
               disabled={isLoading}
               className={`w-full flex items-center justify-center space-x-2 py-3.5 rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-[0.98] ${
                 selectedRole === 'ADMIN'
-                  ? 'bg-sage-800 hover:bg-sage-900 text-white'
+                  ? 'bg-sage-900 hover:bg-black text-white'
+                  : selectedRole === 'TECHNICIAN'
+                  ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
                   : 'bg-sage-500 hover:bg-sage-600 text-white'
               }`}
               id="login-submit"
@@ -230,7 +254,7 @@ export default function LoginPage() {
                 </>
               ) : (
                 <>
-                  <span>Sign In to {selectedRole === 'ADMIN' ? 'Admin Dashboard' : 'Customer Portal'}</span>
+                  <span>Sign In to {selectedRole === 'ADMIN' ? 'Admin Dashboard' : selectedRole === 'TECHNICIAN' ? 'Technician Portal' : 'Customer Portal'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -239,21 +263,34 @@ export default function LoginPage() {
 
           {/* Quick Demo Autofill Notice */}
           <div className="mt-5 pt-4 border-t border-sage-200 text-center">
-            <p className="text-xs text-sage-500 mb-2 font-medium">Quick Demo Credentials (Pre-filled):</p>
-            <div className="flex justify-center gap-2">
+            <p className="text-xs text-sage-500 mb-2 font-medium">Quick Demo Autofill Tabs:</p>
+            <div className="grid grid-cols-3 gap-1.5 text-[10px]">
               <button
                 type="button"
                 onClick={() => handleRoleChange('CUSTOMER')}
-                className="text-[11px] bg-sage-100 hover:bg-sage-200 text-sage-800 px-3 py-1.5 rounded-lg border border-sage-200 transition font-medium"
+                className={`py-1.5 px-1 rounded-lg border transition font-medium ${
+                  selectedRole === 'CUSTOMER' ? 'bg-sage-500 text-white border-sage-600' : 'bg-sage-100 text-sage-800 border-sage-200'
+                }`}
               >
-                👤 Customer: customer@fieldfix.com
+                👤 Customer
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRoleChange('TECHNICIAN')}
+                className={`py-1.5 px-1 rounded-lg border transition font-medium ${
+                  selectedRole === 'TECHNICIAN' ? 'bg-emerald-700 text-white border-emerald-800' : 'bg-sage-100 text-sage-800 border-sage-200'
+                }`}
+              >
+                🔧 Technician
               </button>
               <button
                 type="button"
                 onClick={() => handleRoleChange('ADMIN')}
-                className="text-[11px] bg-sage-100 hover:bg-sage-200 text-sage-800 px-3 py-1.5 rounded-lg border border-sage-200 transition font-medium"
+                className={`py-1.5 px-1 rounded-lg border transition font-medium ${
+                  selectedRole === 'ADMIN' ? 'bg-sage-900 text-white border-black' : 'bg-sage-100 text-sage-800 border-sage-200'
+                }`}
               >
-                🛡️ Admin: admin@fieldfix.com
+                🛡️ Admin
               </button>
             </div>
           </div>

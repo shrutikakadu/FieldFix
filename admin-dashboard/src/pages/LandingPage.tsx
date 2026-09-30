@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Wrench, Shield, MapPin, Clock, Star, ChevronRight, Zap, Users, CheckCircle2, ArrowRight, Sparkles, Phone, Headphones } from 'lucide-react';
+import { Wrench, Shield, Clock, Star, ChevronRight, Zap, Users, CheckCircle2, ArrowRight, Sparkles, Phone, Headphones } from 'lucide-react';
 import { isAuthenticated, getStoredUser } from '../services/auth';
 
 export default function LandingPage() {

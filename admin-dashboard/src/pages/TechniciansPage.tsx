@@ -1,24 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Wrench,
   Users,
   Search,
-  Plus,
   Star,
   Phone,
   Mail,
   MapPin,
-  CheckCircle2,
   Clock,
-  Shield,
-  Filter,
   ArrowLeft,
   LayoutDashboard,
-  BarChart3,
-  Calendar
+  BarChart3
 } from 'lucide-react';
-import { getStoredUser } from '../services/auth';
 
 interface Technician {
   id: string;
@@ -36,7 +29,6 @@ interface Technician {
 
 export default function TechniciansPage() {
   const navigate = useNavigate();
-  const adminUser = getStoredUser();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [skillFilter, setSkillFilter] = useState('ALL');

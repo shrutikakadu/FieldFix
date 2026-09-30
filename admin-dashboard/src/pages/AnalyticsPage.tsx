@@ -1,4 +1,4 @@
-import { useState } from 'react';
+
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3,
@@ -9,15 +9,11 @@ import {
   Clock,
   Users,
   LayoutDashboard,
-  Calendar,
-  Layers,
-  ArrowUpRight,
   Shield
 } from 'lucide-react';
 
 export default function AnalyticsPage() {
   const navigate = useNavigate();
-  const [timeRange, setTimeRange] = useState('MONTH');
 
   const monthlyRevenue = [
     { month: 'Apr', amount: 48000, jobs: 62 },
