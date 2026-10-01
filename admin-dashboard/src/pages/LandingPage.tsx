@@ -132,7 +132,7 @@ export default function LandingPage() {
           </div>
 
           {/* Trust indicators */}
-          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-sage-500">
+          <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-sage-500 mb-12">
             <div className="flex items-center space-x-1.5">
               <Shield className="w-4 h-4 text-sage-400" />
               <span>Verified Technicians</span>
@@ -148,6 +148,14 @@ export default function LandingPage() {
             <div className="flex items-center space-x-1.5">
               <CheckCircle2 className="w-4 h-4 text-sage-400" />
               <span>Money-Back Guarantee</span>
+            </div>
+          </div>
+
+          {/* Hero Images */}
+          <div className="relative mx-auto max-w-5xl rounded-3xl overflow-hidden shadow-2xl border-4 border-white/50">
+            <div className="grid grid-cols-2 gap-2 bg-sage-100 p-2">
+              <img src="/hero_home_service.jpg" alt="Home Service Professional" className="w-full h-80 object-cover rounded-2xl shadow-inner hover:scale-[1.02] transition-transform duration-500" />
+              <img src="/tech_ac_repair.jpg" alt="AC Repair Technician" className="w-full h-80 object-cover rounded-2xl shadow-inner hover:scale-[1.02] transition-transform duration-500" />
             </div>
           </div>
         </div>
@@ -230,6 +238,120 @@ export default function LandingPage() {
                 <p className="text-sm text-sage-500 leading-relaxed">{item.desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===================== TESTIMONIALS ===================== */}
+      <section className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-14">
+            <div className="inline-flex items-center space-x-2 bg-amber-50 text-amber-600 px-4 py-2 rounded-full text-xs font-semibold mb-4 border border-amber-200">
+              <Star className="w-3.5 h-3.5 fill-amber-400" />
+              <span>CUSTOMER STORIES</span>
+            </div>
+            <h2 className="text-3xl md:text-5xl font-display font-extrabold text-sage-900 mb-4">
+              Loved by <span className="text-sage-500">Thousands</span>
+            </h2>
+            <p className="text-sage-500 text-lg max-w-xl mx-auto">
+              Real reviews from real homeowners across India
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { name: 'Priya Sharma', location: 'Bangalore', rating: 5, text: 'The technician arrived within 20 minutes and fixed our AC perfectly. The real-time tracking was amazing — I could see him on the map!', service: 'AC Repair' },
+              { name: 'Amit Patel', location: 'Mumbai', rating: 5, text: 'Best home service app I have used. The technician was ID-verified and very professional. Transparent pricing with no hidden charges.', service: 'Electrical Wiring' },
+              { name: 'Sneha Reddy', location: 'Hyderabad', rating: 5, text: 'Booked a plumbing service at midnight and got a confirmed slot for early morning. Excellent response time and quality work!', service: 'Plumbing' },
+            ].map((review, idx) => (
+              <div key={idx} className="relative bg-sage-50 p-6 rounded-2xl border border-sage-100 hover:shadow-xl transition-all duration-300 hover:border-sage-200 group">
+                <div className="absolute -top-3 left-6 bg-sage-500 text-white text-[10px] font-bold px-3 py-1 rounded-full">{review.service}</div>
+                <div className="flex items-center gap-0.5 mb-4 mt-2">
+                  {Array.from({ length: review.rating }).map((_, i) => (
+                    <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  ))}
+                </div>
+                <p className="text-sm text-sage-700 leading-relaxed mb-5 italic">"{review.text}"</p>
+                <div className="flex items-center gap-3 pt-4 border-t border-sage-200">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-sage-300 to-sage-400 flex items-center justify-center text-white font-bold text-sm shadow">
+                    {review.name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <div>
+                    <p className="font-bold text-sage-800 text-sm">{review.name}</p>
+                    <p className="text-[11px] text-sage-500">{review.location}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===================== WHY CHOOSE FIELDFIX ===================== */}
+      <section className="py-20 bg-sage-900 text-white relative overflow-hidden">
+        <div className="absolute inset-0 opacity-5 pointer-events-none" style={{
+          backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)',
+          backgroundSize: '40px 40px',
+        }} />
+
+        <div className="relative z-10 max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <div>
+              <div className="inline-flex items-center space-x-2 bg-sage-800 text-sage-300 px-4 py-2 rounded-full text-xs font-semibold mb-6 border border-sage-700">
+                <Shield className="w-3.5 h-3.5" />
+                <span>WHY FIELDFIX</span>
+              </div>
+              <h2 className="text-3xl md:text-4xl font-display font-extrabold mb-6 leading-tight">
+                India's Most <span className="text-sage-400">Trusted</span> Home Service Platform
+              </h2>
+              <p className="text-sage-400 text-base leading-relaxed mb-8">
+                Every technician is background-verified with government-issued IDs. We use GPS tracking, automated dispatching, and transparent pricing to deliver a premium experience.
+              </p>
+              <div className="space-y-4">
+                {[
+                  { title: 'ID-Verified Technicians', desc: 'Every technician undergoes government ID verification before joining' },
+                  { title: 'Real-Time GPS Tracking', desc: 'Track your technician live on the map from dispatch to doorstep' },
+                  { title: 'Transparent Pricing', desc: 'No hidden charges — see the full cost breakdown before booking' },
+                  { title: 'Money-Back Guarantee', desc: '100% refund if you\'re not satisfied with the service quality' },
+                ].map((item, idx) => (
+                  <div key={idx} className="flex items-start gap-3 group">
+                    <div className="mt-0.5 p-1.5 rounded-lg bg-sage-500/20 text-sage-400 group-hover:bg-sage-500/30 transition">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white text-sm">{item.title}</p>
+                      <p className="text-xs text-sage-400">{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="relative">
+              <div className="rounded-3xl overflow-hidden shadow-2xl border-2 border-sage-700">
+                <img src="/tech_ac_repair.jpg" alt="Professional technician at work" className="w-full h-[440px] object-cover" />
+              </div>
+              {/* Floating stats card */}
+              <div className="absolute -bottom-6 -left-6 bg-white text-sage-900 rounded-2xl shadow-xl p-5 border border-sage-200">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-50 rounded-xl">
+                    <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-extrabold text-sage-900">10,000+</p>
+                    <p className="text-xs text-sage-500 font-medium">Happy Homeowners</p>
+                  </div>
+                </div>
+              </div>
+              {/* Floating rating card */}
+              <div className="absolute -top-4 -right-4 bg-white text-sage-900 rounded-2xl shadow-xl p-4 border border-sage-200">
+                <div className="flex items-center gap-2">
+                  <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+                  <span className="text-xl font-extrabold">4.9</span>
+                </div>
+                <p className="text-[10px] text-sage-500 mt-0.5">Customer Rating</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>

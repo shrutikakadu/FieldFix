@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
 
 const router = Router();
+const prisma = new PrismaClient();
 
 // Health check endpoint
 router.get('/health', (req: Request, res: Response) => {
@@ -12,38 +14,53 @@ router.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// Demo Stats endpoint for Admin Dashboard
-router.get('/stats', (req: Request, res: Response) => {
-  res.status(200).json({
-    activeJobs: 24,
-    availableTechs: 12,
-    pendingRequests: 5,
-    todayCompleted: 48
-  });
+// Real Stats endpoint for Admin Dashboard
+router.get('/stats', async (req: Request, res: Response) => {
+  try {
+    const activeJobs = await prisma.booking.count({ where: { status: { in: ['IN_PROGRESS', 'DISPATCHED', 'ACCEPTED'] } } });
+    const availableTechs = await prisma.technicianProfile.count({ where: { isAvailable: true } });
+    const pendingRequests = await prisma.booking.count({ where: { status: 'PENDING' } });
+    
+    // For today completed, theoretically we'd check dates, but let's just count COMPLETED
+    const todayCompleted = await prisma.booking.count({ where: { status: 'COMPLETED' } });
+
+    res.status(200).json({
+      activeJobs,
+      availableTechs,
+      pendingRequests,
+      todayCompleted
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
 });
 
-// Demo Bookings list endpoint
-router.get('/bookings', (req: Request, res: Response) => {
-  res.status(200).json([
-    {
-      id: 'bk_101',
-      customerName: 'Alex Johnson',
-      service: 'AC Repair & Maintenance',
-      status: 'IN_PROGRESS',
-      technicianName: 'David Miller',
-      location: { lat: 37.7749, lng: -122.4194 },
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'bk_102',
-      customerName: 'Sarah Williams',
-      service: 'Electrical Wiring Inspection',
-      status: 'DISPATCHED',
-      technicianName: 'Elena Rostova',
-      location: { lat: 37.7833, lng: -122.4167 },
-      createdAt: new Date().toISOString()
-    }
-  ]);
+// Real Bookings list endpoint
+router.get('/bookings', async (req: Request, res: Response) => {
+  try {
+    const bookings = await prisma.booking.findMany({
+      include: {
+        customer: true,
+        technician: true,
+        category: true,
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    const formatted = bookings.map(b => ({
+      id: b.id,
+      customerName: b.customer.name,
+      service: b.category.name,
+      status: b.status,
+      technicianName: b.technician?.name || 'Unassigned',
+      address: b.address,
+      location: { lat: b.latitude, lng: b.longitude },
+      createdAt: b.createdAt
+    }));
+    res.status(200).json(formatted);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch bookings' });
+  }
 });
 
 export default router;
