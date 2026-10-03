@@ -2,6 +2,7 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import apiRouter from './routes/api';
 import authRouter from './routes/auth';
+import paymentsRouter from './routes/payments';
 
 const app: Express = express();
 
@@ -13,6 +14,7 @@ app.use(express.urlencoded({ extended: true }));
 // REST API Routes
 app.use('/api', apiRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/payments', paymentsRouter);
 
 
 // Global Error Handler

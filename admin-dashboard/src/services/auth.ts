@@ -37,7 +37,7 @@ export const registerUser = async (
 };
 
 /** Fetch all technicians (optionally filtered by skill/city) */
-export const getTechnicians = async (params?: { skill?: string; city?: string; available?: boolean }) => {
+export const getTechnicians = async (params?: { skill?: string; city?: string; name?: string; available?: boolean }) => {
   const queryStr = params
     ? '?' + Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')
     : '';

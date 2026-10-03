@@ -14,30 +14,17 @@ export default function LoginPage() {
 
   const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
   
-  const [email, setEmail] = useState(
-    initialRole === 'ADMIN' ? 'admin@fieldfix.com' : initialRole === 'TECHNICIAN' ? 'tech@fieldfix.com' : 'customer@fieldfix.com'
-  );
-  const [password, setPassword] = useState(
-    initialRole === 'ADMIN' ? 'admin123' : initialRole === 'TECHNICIAN' ? 'tech123' : 'customer123'
-  );
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // When tab changes, update default values and clear errors
   const handleRoleChange = (role: UserRole) => {
     setSelectedRole(role);
     setError('');
-    if (role === 'ADMIN') {
-      setEmail('admin@fieldfix.com');
-      setPassword('admin123');
-    } else if (role === 'TECHNICIAN') {
-      setEmail('tech@fieldfix.com');
-      setPassword('tech123');
-    } else {
-      setEmail('customer@fieldfix.com');
-      setPassword('customer123');
-    }
+    setEmail('');
+    setPassword('');
   };
 
   const handleLogin = async (e: React.FormEvent) => {

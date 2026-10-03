@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   Calendar,
   MapPin,
@@ -8,17 +8,16 @@ import {
   Mail,
   CreditCard,
   Wrench,
-  Navigation,
-  Activity
+  Navigation
 } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
+import { fetchBookings } from '../services/api';
 
 interface BookingDetail {
   id: string;
   service: string;
   category: string;
-  status: 'PENDING' | 'ACCEPTED' | 'DISPATCHED' | 'IN_PROGRESS' | 'COMPLETED';
-  priority: 'URGENT' | 'HIGH' | 'MEDIUM' | 'NORMAL';
+  status: 'PENDING' | 'ACCEPTED' | 'DISPATCHED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
   scheduledAt: string;
   createdAt: string;
   totalAmount: number;
@@ -39,51 +38,58 @@ interface BookingDetail {
     eta: string;
   };
   description: string;
-  timeline: { title: string; time: string; done: boolean }[];
 }
 
 export default function BookingDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
 
-  const [booking, setBooking] = useState<BookingDetail>({
-    id: id || 'BK-9021',
-    service: 'HVAC Air Conditioning Overhaul',
-    category: 'HVAC & Cooling',
-    status: 'IN_PROGRESS',
-    priority: 'URGENT',
-    scheduledAt: 'Today, 2:30 PM',
-    createdAt: 'Oct 01, 2026, 11:15 AM',
-    totalAmount: 1850,
-    paymentStatus: 'PAID',
-    paymentMethod: 'UPI / Razorpay',
-    transactionId: 'TXN_984392019',
-    customer: {
-      name: 'Marcus Sterling',
-      phone: '+91 98451 22334',
-      email: 'marcus@fieldfix.io',
-      address: '742 Evergreen Terrace, Sector 4, Koramangala, Bengaluru'
-    },
-    technician: {
-      name: 'David Miller',
-      phone: '+91 98765 43210',
-      email: 'david@fieldfix.io',
-      rating: 4.9,
-      eta: 'Arrived at Site'
-    },
-    description: 'Compressor unit vibrating loudly and low cooling output across master bedroom & living room split AC units.',
-    timeline: [
-      { title: 'Booking Created & Payment Confirmed', time: '11:15 AM', done: true },
-      { title: 'Technician Assigned (David Miller)', time: '11:20 AM', done: true },
-      { title: 'Technician Dispatched & Live Tracking On', time: '11:35 AM', done: true },
-      { title: 'On-Site Diagnostic & Work In Progress', time: '12:00 PM', done: true },
-      { title: 'Work Completion & Customer Sign-Off', time: 'Pending', done: false }
-    ]
-  });
+  const [booking, setBooking] = useState<BookingDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  const updateStatus = (newStatus: BookingDetail['status']) => {
-    setBooking(prev => ({ ...prev, status: newStatus }));
-  };
+  useEffect(() => {
+    let cancelled = false;
+    fetchBookings().then((bookings: any[]) => {
+      if (cancelled) return;
+      const result = bookings.find(item => item.id === id);
+      if (!result) {
+        setError('Booking not found.');
+        return;
+      }
+      setBooking({
+        id: result.id,
+        service: result.service,
+        category: result.service,
+        status: result.status,
+        scheduledAt: new Date(result.scheduledAt).toLocaleString(),
+        createdAt: new Date(result.createdAt).toLocaleString(),
+        totalAmount: result.amount,
+        paymentStatus: 'PENDING',
+        paymentMethod: 'Not recorded',
+        transactionId: '—',
+        customer: {
+          name: result.customerName,
+          phone: result.customerPhone,
+          email: result.customerEmail,
+          address: result.address,
+        },
+        technician: result.technicianId ? {
+          name: result.technicianName,
+          phone: result.technicianPhone,
+          email: result.technicianEmail,
+          rating: result.technicianRating,
+          eta: result.status,
+        } : undefined,
+        description: result.description || 'No problem description provided.',
+      });
+    }).catch(() => { if (!cancelled) setError('Could not load booking details.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [id]);
+
+  if (loading || !booking) {
+    return <AdminLayout activeTab="dashboard"><div className="rounded-2xl border border-sage-200 bg-white p-10 text-center text-sm text-sage-600">{loading ? 'Loading booking…' : error || 'Booking not found.'}</div></AdminLayout>;
+  }
 
   return (
     <AdminLayout activeTab="dashboard">
@@ -108,27 +114,6 @@ export default function BookingDetailPage() {
             <p className="text-xs text-sage-600 mt-1">Created {booking.createdAt}</p>
           </div>
 
-          {/* Quick status transitions */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => updateStatus('DISPATCHED')}
-              className="px-3 py-1.5 bg-sage-100 hover:bg-sage-200 text-xs font-semibold text-sage-700 rounded-xl transition"
-            >
-              Mark Dispatched
-            </button>
-            <button
-              onClick={() => updateStatus('IN_PROGRESS')}
-              className="px-3 py-1.5 bg-sage-600 hover:bg-sage-500 text-xs font-semibold text-sage-900 rounded-xl transition"
-            >
-              Mark In-Progress
-            </button>
-            <button
-              onClick={() => updateStatus('COMPLETED')}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-sage-900 rounded-xl transition shadow-glow-emerald"
-            >
-              Mark Completed
-            </button>
-          </div>
         </div>
 
         {/* Main Grid */}
@@ -144,8 +129,8 @@ export default function BookingDetailPage() {
                   </span>
                   <h2 className="text-xl font-bold text-sage-900 mt-1">{booking.service}</h2>
                 </div>
-                <span className="px-3 py-1 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold rounded-lg">
-                  {booking.priority} PRIORITY
+                <span className="px-3 py-1 bg-sage-100 border border-sage-200 text-sage-700 text-xs font-bold rounded-lg">
+                  {booking.status.replace('_', ' ')}
                 </span>
               </div>
 
@@ -165,34 +150,6 @@ export default function BookingDetailPage() {
               </div>
             </div>
 
-            {/* Job State Transition Timeline */}
-            <div className="bg-white border border-sage-200 rounded-xl p-5">
-              <h3 className="text-sm font-bold text-sage-900 uppercase tracking-wider mb-4 flex items-center space-x-2">
-                <Activity className="w-4 h-4 text-sage-700" />
-                <span>Service Lifecycle Timeline</span>
-              </h3>
-
-              <div className="space-y-4 relative pl-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-sage-100">
-                {booking.timeline.map((step, idx) => (
-                  <div key={idx} className="relative flex items-start space-x-3">
-                    <div
-                      className={`w-3.5 h-3.5 rounded-full mt-1 border-2 ${
-                        step.done
-                          ? 'bg-sage-500 border-sky-400'
-                          : 'bg-white border-slate-600'
-                      }`}
-                    />
-                    <div className="flex-1 flex items-center justify-between">
-                      <p className={`text-sm ${step.done ? 'text-sage-900 font-medium' : 'text-sage-500'}`}>
-                        {step.title}
-                      </p>
-                      <span className="text-xs text-sage-600">{step.time}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Payment & Invoice Breakdown */}
             <div className="bg-white border border-sage-200 rounded-xl p-5">
               <h3 className="text-sm font-bold text-sage-900 uppercase tracking-wider mb-4 flex items-center space-x-2">
@@ -202,12 +159,12 @@ export default function BookingDetailPage() {
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                 <div>
-                  <p className="text-sage-600">Total Billed</p>
+                  <p className="text-sage-600">Service Estimate</p>
                   <p className="text-lg font-bold text-sage-900 mt-1">₹{booking.totalAmount}</p>
                 </div>
                 <div>
                   <p className="text-sage-600">Payment Status</p>
-                  <p className="text-sm font-bold text-emerald-400 mt-1">{booking.paymentStatus}</p>
+                  <p className="text-sm font-bold text-sage-700 mt-1">{booking.paymentStatus}</p>
                 </div>
                 <div>
                   <p className="text-sage-600">Method</p>
@@ -270,18 +227,12 @@ export default function BookingDetailPage() {
                   </div>
                   <div className="p-2.5 bg-sage-500/10 border border-sky-500/30 rounded-lg text-sage-600 font-semibold flex items-center space-x-2">
                     <Navigation className="w-4 h-4" />
-                    <span>Live Status: {booking.technician.eta}</span>
+                    <span>Job Status: {booking.technician.eta}</span>
                   </div>
                 </div>
               ) : (
                 <div className="text-center py-4">
                   <p className="text-xs text-sage-600 mb-3">No technician assigned yet</p>
-                  <button
-                    onClick={() => navigate('/admin/technicians')}
-                    className="px-4 py-2 bg-sage-600 hover:bg-sage-500 text-sage-900 text-xs font-bold rounded-lg transition"
-                  >
-                    Assign Technician
-                  </button>
                 </div>
               )}
             </div>

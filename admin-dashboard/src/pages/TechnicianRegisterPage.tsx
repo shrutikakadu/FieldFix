@@ -3,7 +3,7 @@ import TechnicianRegisterForm from '../components/TechnicianRegisterForm';
 
 export default function TechnicianRegisterPage() {
   return (
-    <AdminLayout activeTab="register-tech">
+    <AdminLayout activeTab="technicians">
       <TechnicianRegisterForm />
     </AdminLayout>
   );

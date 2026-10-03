@@ -4,9 +4,9 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import Dashboard from './pages/Dashboard';
 import TechniciansPage from './pages/TechniciansPage';
-import TechnicianRegisterPage from './pages/TechnicianRegisterPage';
 import BookingDetailPage from './pages/BookingDetailPage';
 import AnalyticsPage from './pages/AnalyticsPage';
+import SupportInboxPage from './pages/SupportInboxPage';
 import CustomerDashboard from './pages/CustomerDashboard';
 import TechnicianDashboard from './pages/TechnicianDashboard';
 import { isAuthenticated, getStoredUser } from './services/auth';
@@ -41,11 +41,11 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
 
         {/* Admin Dashboard (ADMIN only) */}
-        <Route path="/admin/dashboard"            element={<ProtectedRoute allowedRoles={['ADMIN']}><Dashboard /></ProtectedRoute>} />
-        <Route path="/admin/technicians"          element={<ProtectedRoute allowedRoles={['ADMIN']}><TechniciansPage /></ProtectedRoute>} />
-        <Route path="/admin/technicians/register" element={<ProtectedRoute allowedRoles={['ADMIN']}><TechnicianRegisterPage /></ProtectedRoute>} />
-        <Route path="/admin/bookings/:id"         element={<ProtectedRoute allowedRoles={['ADMIN']}><BookingDetailPage /></ProtectedRoute>} />
-        <Route path="/admin/analytics"            element={<ProtectedRoute allowedRoles={['ADMIN']}><AnalyticsPage /></ProtectedRoute>} />
+        <Route path="/admin/dashboard"   element={<ProtectedRoute allowedRoles={['ADMIN']}><Dashboard /></ProtectedRoute>} />
+        <Route path="/admin/technicians" element={<ProtectedRoute allowedRoles={['ADMIN']}><TechniciansPage /></ProtectedRoute>} />
+        <Route path="/admin/bookings/:id" element={<ProtectedRoute allowedRoles={['ADMIN']}><BookingDetailPage /></ProtectedRoute>} />
+        <Route path="/admin/analytics"   element={<ProtectedRoute allowedRoles={['ADMIN']}><AnalyticsPage /></ProtectedRoute>} />
+        <Route path="/admin/support"    element={<ProtectedRoute allowedRoles={['ADMIN']}><SupportInboxPage /></ProtectedRoute>} />
 
         {/* Customer Dashboard (CUSTOMER only) */}
         <Route path="/customer/dashboard" element={<ProtectedRoute allowedRoles={['CUSTOMER']}><CustomerDashboard /></ProtectedRoute>} />

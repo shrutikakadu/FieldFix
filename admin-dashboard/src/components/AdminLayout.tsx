@@ -3,7 +3,6 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Wrench,
   Users,
-  UserPlus,
   BarChart3,
   Layers,
   LogOut,
@@ -12,7 +11,8 @@ import {
   ShieldCheck,
   Zap,
   Menu,
-  X
+  X,
+  LifeBuoy
 } from 'lucide-react';
 import { logoutAdmin, getStoredUser } from '../services/auth';
 import { socket } from '../services/socket';
@@ -20,11 +20,10 @@ import { fetchHealthStatus } from '../services/api';
 
 interface AdminLayoutProps {
   children: React.ReactNode;
-  activeTab?: 'dashboard' | 'technicians' | 'register-tech' | 'analytics';
-  onOpenRegisterModal?: () => void;
+  activeTab?: 'dashboard' | 'technicians' | 'analytics' | 'support';
 }
 
-export default function AdminLayout({ children, activeTab = 'dashboard', onOpenRegisterModal }: AdminLayoutProps) {
+export default function AdminLayout({ children, activeTab = 'dashboard' }: AdminLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const adminUser = getStoredUser();
@@ -94,15 +93,6 @@ export default function AdminLayout({ children, activeTab = 'dashboard', onOpenR
       description: 'Manage technicians & availability'
     },
     {
-      id: 'register-tech',
-      label: 'Register Technician',
-      path: '/admin/technicians/register',
-      icon: UserPlus,
-      badge: 'Verified',
-      badgeColor: 'bg-[#2d5a27]/30 text-emerald-300 border-emerald-500/30',
-      description: 'Add ID-verified field staff'
-    },
-    {
       id: 'analytics',
       label: 'Analytics & Revenue',
       path: '/admin/analytics',
@@ -110,6 +100,13 @@ export default function AdminLayout({ children, activeTab = 'dashboard', onOpenR
       badge: 'MTD',
       badgeColor: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
       description: 'Growth charts & SLA metrics'
+    },
+    {
+      id: 'support',
+      label: 'Support Inbox',
+      path: '/admin/support',
+      icon: LifeBuoy,
+      description: 'Reply to customer and technician messages'
     }
   ];
 
@@ -167,21 +164,7 @@ export default function AdminLayout({ children, activeTab = 'dashboard', onOpenR
             </div>
           )}
 
-          {/* Quick Technician Register Button CTA */}
-          {sidebarOpen && (
-            <div className="px-4 mt-4">
-              <button
-                onClick={() => {
-                  if (onOpenRegisterModal) onOpenRegisterModal();
-                  else navigate('/admin/technicians/register');
-                }}
-                className="w-full flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-sage-900 text-xs font-bold shadow-glow-emerald transition active:scale-95 group"
-              >
-                <UserPlus className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                <span>+ Register Technician</span>
-              </button>
-            </div>
-          )}
+
 
           {/* Navigation Links */}
           <nav className="p-3 space-y-1.5 mt-2">
@@ -268,8 +251,8 @@ export default function AdminLayout({ children, activeTab = 'dashboard', onOpenR
                   ? 'Dispatch Operations Control'
                   : activeTab === 'technicians'
                   ? 'Technician Directory & Availability'
-                  : activeTab === 'register-tech'
-                  ? 'Technician Registration Form'
+                  : activeTab === 'support'
+                  ? 'Customer & Technician Support'
                   : 'Analytics & Financial Telemetry'}
               </span>
             </div>
@@ -289,17 +272,7 @@ export default function AdminLayout({ children, activeTab = 'dashboard', onOpenR
               />
             </div>
 
-            {/* Quick Action button for registering technician */}
-            <button
-              onClick={() => {
-                if (onOpenRegisterModal) onOpenRegisterModal();
-                else navigate('/admin/technicians/register');
-              }}
-              className="hidden sm:flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-sage-900 font-bold text-xs shadow-glow-emerald transition"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>+ Register Tech</span>
-            </button>
+
 
             {/* Live Gateway Indicator Pill */}
             <div className="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-sage-50 border border-sage-200 text-xs">

@@ -31,6 +31,7 @@ model User {
   reviewsGiven     Review[]     @relation("ReviewsGiven")
   reviewsReceived  Review[]     @relation("ReviewsReceived")
   technicianProfile TechnicianProfile?
+  chatMessages     ChatMessage[]
 
   @@map("users")
 }
@@ -44,12 +45,12 @@ model TechnicianProfile {
   specialization      String   @default("")         // Primary specialization label
   bio                 String   @default("")
   city                String   @default("Bangalore")
-  experienceYears     Int      @default(1)
+  experienceYears     Int      @default(0)
   photoUrl            String?                       // Profile photo URL
   isAvailable         Boolean  @default(true)
   currentLat          Float?   @default(12.9716)
   currentLng          Float?   @default(77.5946)
-  rating              Float    @default(5.0)
+  rating              Float    @default(0.0)
   totalJobs           Int      @default(0)
 
   @@map("technician_profiles")
@@ -81,6 +82,7 @@ model Booking {
   longitude      Float
   scheduledAt    DateTime
   totalAmount    Float
+  description    String          @default("")
   
   payment        Payment?
   review         Review?
@@ -117,4 +119,16 @@ model Review {
   createdAt    DateTime @default(now())
 
   @@map("reviews")
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  threadId  String
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([threadId, createdAt])
+  @@map("chat_messages")
 }

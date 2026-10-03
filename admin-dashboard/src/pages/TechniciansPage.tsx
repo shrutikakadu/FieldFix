@@ -6,14 +6,12 @@ import {
   Mail,
   MapPin,
   Clock,
-  UserPlus,
   BadgeCheck,
-  X,
   RefreshCw
 } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
-import TechnicianRegisterForm from '../components/TechnicianRegisterForm';
 import { getTechnicians } from '../services/auth';
+import { updateTechnicianAvailability } from '../services/api';
 
 interface Technician {
   id: string;
@@ -34,84 +32,14 @@ export default function TechniciansPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [skillFilter, setSkillFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
-  const [technicians, setTechnicians] = useState<Technician[]>([
-    {
-      id: 'TECH-101',
-      name: 'David Miller',
-      email: 'david@fieldfix.io',
-      phone: '+91 98765 43210',
-      skills: ['HVAC & Air Conditioning', 'Appliance Repair'],
-      isAvailable: true,
-      rating: 4.9,
-      totalJobs: 142,
-      currentLocation: 'Koramangala, Sector 4',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      verifiedId: 'TECH-KA-2024-0012',
-      currentTask: 'Active on BK-9021 (HVAC Overhaul)'
-    },
-    {
-      id: 'TECH-102',
-      name: 'Elena Rostova',
-      email: 'elena@fieldfix.io',
-      phone: '+91 98765 43211',
-      skills: ['Electrical Wiring', 'Smart Home Installation'],
-      isAvailable: true,
-      rating: 4.8,
-      totalJobs: 98,
-      currentLocation: 'Indiranagar 100ft Rd',
-      avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&auto=format&fit=crop&q=80',
-      verifiedId: 'TECH-KA-2024-0044',
-      currentTask: 'Dispatched to BK-9022'
-    },
-    {
-      id: 'TECH-103',
-      name: 'Marcus Vance',
-      email: 'mvance@fieldfix.io',
-      phone: '+91 98765 43212',
-      skills: ['Plumbing Services', 'Appliance Repair'],
-      isAvailable: false,
-      rating: 4.7,
-      totalJobs: 115,
-      currentLocation: 'HSR Layout Sector 1',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-      verifiedId: 'TECH-KA-2023-0109'
-    },
-    {
-      id: 'TECH-104',
-      name: 'Priya Sharma',
-      email: 'priya@fieldfix.io',
-      phone: '+91 98765 43213',
-      skills: ['Smart Home Installation', 'Electrical Wiring'],
-      isAvailable: true,
-      rating: 4.95,
-      totalJobs: 78,
-      currentLocation: 'Whitefield Main Rd',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-      verifiedId: 'TECH-KA-2025-0081'
-    },
-    {
-      id: 'TECH-105',
-      name: 'Rajesh Kumar',
-      email: 'rajesh@fieldfix.io',
-      phone: '+91 98765 43214',
-      skills: ['Plumbing Services', 'HVAC & Air Conditioning'],
-      isAvailable: true,
-      rating: 4.6,
-      totalJobs: 89,
-      currentLocation: 'JP Nagar Phase 2',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-      verifiedId: 'TECH-KA-2024-0099'
-    }
-  ]);
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
 
   const loadBackendTechnicians = async () => {
     setIsLoading(true);
     try {
       const data = await getTechnicians();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         const formatted: Technician[] = data.map((t: any) => {
           let parsedSkills = [];
           try {
@@ -121,29 +49,23 @@ export default function TechniciansPage() {
           }
 
           return {
-            id: t.id ? `TECH-${t.id.slice(0, 4).toUpperCase()}` : 'TECH-PRO',
+            id: t.user?.id || t.id,
             name: t.user?.name || 'Registered Tech',
             email: t.user?.email || 'tech@fieldfix.io',
-            phone: t.user?.phone || '+91 98765 00000',
-            skills: parsedSkills && parsedSkills.length > 0 ? parsedSkills : ['HVAC & Electrical'],
+            phone: t.user?.phone || '',
+            skills: parsedSkills || [],
             isAvailable: t.isAvailable ?? true,
-            rating: t.rating || 5.0,
-            totalJobs: t.totalJobs || 1,
-            currentLocation: t.city || 'Bangalore',
-            avatar: t.user?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-            verifiedId: t.technicianVerifiedId || 'TECH-VERIFIED-2026'
+            rating: t.rating ?? 0,
+            totalJobs: t.totalJobs ?? 0,
+            currentLocation: t.city || '',
+            avatar: t.photoUrl || t.user?.avatarUrl || '',
+            verifiedId: t.technicianVerifiedId || ''
           };
         });
-
-        // Merge with mock defaults so list is comprehensive
-        setTechnicians((prev) => {
-          const existingIds = new Set(prev.map((p) => p.verifiedId));
-          const uniqueNew = formatted.filter((f) => !existingIds.has(f.verifiedId));
-          return [...uniqueNew, ...prev];
-        });
+        setTechnicians(formatted);
       }
-    } catch (err) {
-      console.warn('Backend API connection offline, displaying active technicians mock state');
+    } catch {
+      setTechnicians([]);
     } finally {
       setIsLoading(false);
     }
@@ -153,10 +75,13 @@ export default function TechniciansPage() {
     loadBackendTechnicians();
   }, []);
 
-  const toggleAvailability = (id: string) => {
-    setTechnicians((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, isAvailable: !t.isAvailable } : t))
-    );
+  const toggleAvailability = async (technician: Technician) => {
+    try {
+      await updateTechnicianAvailability(!technician.isAvailable, technician.id);
+      setTechnicians(previous => previous.map(item => item.id === technician.id ? { ...item, isAvailable: !item.isAvailable } : item));
+    } catch {
+      await loadBackendTechnicians();
+    }
   };
 
   const filteredTechs = technicians.filter((t) => {
@@ -176,7 +101,7 @@ export default function TechniciansPage() {
   });
 
   return (
-    <AdminLayout activeTab="technicians" onOpenRegisterModal={() => setIsRegisterModalOpen(true)}>
+    <AdminLayout activeTab="technicians">
       <div className="space-y-6">
         {/* HERO HEADER STRIP */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-sage-50 via-white to-sage-100/40 p-6 rounded-2xl border border-sage-200 shadow-xl relative overflow-hidden">
@@ -190,9 +115,7 @@ export default function TechniciansPage() {
             <h1 className="text-2xl md:text-3xl font-display font-extrabold text-sage-900 tracking-tight">
               Technician Staff & Availability
             </h1>
-            <p className="text-sage-600 text-xs mt-1">
-              Monitor active trade-certified technicians, availability status, and onboard new personnel.
-            </p>
+            <p className="text-sage-600 text-xs mt-1">Monitor registered technicians and update their booking availability.</p>
           </div>
 
           <div className="flex items-center space-x-3">
@@ -205,13 +128,6 @@ export default function TechniciansPage() {
               <RefreshCw className={`w-4 h-4 text-sage-700 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
 
-            <button
-              onClick={() => setIsRegisterModalOpen(true)}
-              className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 via-teal-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-sage-900 font-bold text-xs shadow-glow-emerald transition active:scale-95"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>+ Register New Technician</span>
-            </button>
           </div>
         </div>
 
@@ -228,14 +144,14 @@ export default function TechniciansPage() {
             </p>
           </div>
           <div className="bg-white/90 border border-sage-200 p-4 rounded-xl shadow-lg">
-            <p className="text-xs text-amber-400 uppercase font-semibold">On Active Job</p>
+            <p className="text-xs text-amber-400 uppercase font-semibold">Unavailable</p>
             <p className="text-3xl font-display font-extrabold text-amber-400 mt-1">
-              {technicians.filter((t) => !t.isAvailable || t.currentTask).length}
+              {technicians.filter((t) => !t.isAvailable).length}
             </p>
           </div>
           <div className="bg-white/90 border border-sage-200 p-4 rounded-xl shadow-lg">
             <p className="text-xs text-sage-700 uppercase font-semibold">Avg CSAT Rating</p>
-            <p className="text-3xl font-display font-extrabold text-sage-700 mt-1">4.88★</p>
+            <p className="text-3xl font-display font-extrabold text-sage-700 mt-1">{technicians.some(t => t.rating > 0) ? (technicians.filter(t => t.rating > 0).reduce((sum, t) => sum + t.rating, 0) / technicians.filter(t => t.rating > 0).length).toFixed(2) : '—'}</p>
           </div>
         </div>
 
@@ -288,11 +204,7 @@ export default function TechniciansPage() {
               <div>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3">
-                    <img
-                      src={tech.avatar}
-                      alt={tech.name}
-                      className="w-12 h-12 rounded-2xl object-cover border-2 border-sage-300 shadow-md group-hover:scale-105 transition-transform"
-                    />
+                    {tech.avatar ? <img src={tech.avatar} alt={tech.name} className="w-12 h-12 rounded-2xl object-cover border-2 border-sage-300" /> : <div className="w-12 h-12 rounded-2xl bg-sage-100 flex items-center justify-center text-sage-700 font-bold">{tech.name.split(' ').map(part => part[0]).join('').slice(0, 2)}</div>}
                     <div>
                       <h2 className="font-bold text-sage-900 text-base leading-tight">{tech.name}</h2>
                       <div className="flex items-center space-x-1.5 mt-0.5">
@@ -365,7 +277,7 @@ export default function TechniciansPage() {
                 </span>
 
                 <button
-                  onClick={() => toggleAvailability(tech.id)}
+                  onClick={() => toggleAvailability(tech)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                     tech.isAvailable
                       ? 'bg-sage-100 hover:bg-sage-200 text-sage-700'
@@ -380,26 +292,6 @@ export default function TechniciansPage() {
         </div>
       </div>
 
-      {/* ================= REGISTER TECHNICIAN MODAL ================= */}
-      {isRegisterModalOpen && (
-        <div className="fixed inset-0 z-50 bg-sage-50/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
-          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto my-8">
-            <button
-              onClick={() => setIsRegisterModalOpen(false)}
-              className="absolute top-4 right-4 z-50 text-sage-600 hover:text-sage-900 p-2 rounded-xl bg-sage-100/80 hover:bg-sage-200 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <TechnicianRegisterForm
-              isModal={true}
-              onSuccess={() => {
-                loadBackendTechnicians();
-              }}
-            />
-          </div>
-        </div>
-      )}
     </AdminLayout>
   );
 }

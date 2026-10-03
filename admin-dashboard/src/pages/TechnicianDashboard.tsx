@@ -5,9 +5,11 @@ import {
   DollarSign, ShieldCheck, Power, Navigation, Settings, FileText,
   Check, LogOut, Menu, X, Users, Briefcase, BadgeCheck,
   CreditCard, TrendingUp, Calendar, MessageSquare, Award,
-  Mail, Building
+  Building, LifeBuoy, Send
 } from 'lucide-react';
 import { logoutAdmin, getStoredUser } from '../services/auth';
+import { apiClient, fetchMessages, sendMessage, updateBookingStatus } from '../services/api';
+import { socket } from '../services/socket';
 
 interface Job {
   id: string;
@@ -23,73 +25,25 @@ interface Job {
   lng: number;
 }
 
-const MOCK_JOBS: Job[] = [
-  {
-    id: 'JOB-9081',
-    customerName: 'Priya Sharma',
-    customerPhone: '+91 98765 12345',
-    customerAddress: '42 Indiranagar, 10th Main Rd, Bangalore',
-    serviceType: 'AC Deep Cleaning & Gas Refill',
-    scheduledTime: 'Today, 2:30 PM',
-    status: 'IN_PROGRESS',
-    amount: 1499,
-    notes: 'Split AC 1.5 Ton indoor unit leaking water and cooling issue.',
-    lat: 12.9784,
-    lng: 77.6408,
-  },
-  {
-    id: 'JOB-9084',
-    customerName: 'Rahul Verma',
-    customerPhone: '+91 98765 67890',
-    customerAddress: '15 Koramangala 4th Block, Bangalore',
-    serviceType: 'Refrigerator Compressor Check',
-    scheduledTime: 'Today, 5:00 PM',
-    status: 'ACCEPTED',
-    amount: 899,
-    notes: 'Double door Whirlpool fridge not cooling freezer section.',
-    lat: 12.9352,
-    lng: 77.6245,
-  },
-  {
-    id: 'JOB-9077',
-    customerName: 'Ananya Deshmukh',
-    customerPhone: '+91 98765 44332',
-    customerAddress: '88 HSR Layout Sector 1, Bangalore',
-    serviceType: 'Washing Machine Repair',
-    scheduledTime: 'Yesterday, 11:00 AM',
-    status: 'COMPLETED',
-    amount: 1200,
-    notes: 'Front load drain pump replaced successfully.',
-    lat: 12.9121,
-    lng: 77.6446,
-  },
-  {
-    id: 'JOB-9090',
-    customerName: 'Meera Nair',
-    customerPhone: '+91 98765 55566',
-    customerAddress: '22 Whitefield Main Rd, Bangalore',
-    serviceType: 'Water Heater Installation',
-    scheduledTime: 'Tomorrow, 10:00 AM',
-    status: 'PENDING',
-    amount: 2200,
-    notes: 'New Racold 25L instant water heater wall mount.',
-    lat: 12.9698,
-    lng: 77.7500,
-  }
-];
-
-type TabId = 'jobs' | 'form' | 'earnings' | 'reviews' | 'customers' | 'profile' | 'settings';
+type TabId = 'jobs' | 'messages' | 'form' | 'earnings' | 'reviews' | 'customers' | 'profile' | 'settings' | 'support';
 
 export default function TechnicianDashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('jobs');
-  const [jobs, setJobs] = useState<Job[]>(MOCK_JOBS);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [supportMessages, setSupportMessages] = useState<any[]>([]);
+  const [supportInput, setSupportInput] = useState('');
+  const [supportError, setSupportError] = useState('');
+  const [selectedJobId, setSelectedJobId] = useState('');
+  const [jobMessages, setJobMessages] = useState<any[]>([]);
+  const [jobMessageInput, setJobMessageInput] = useState('');
+  const locationBookingIds = jobs.filter(job => ['ACCEPTED', 'IN_PROGRESS'].includes(job.status)).map(job => job.id).join(',');
 
   // Service form state
   const [formData, setFormData] = useState({
@@ -110,21 +64,127 @@ export default function TechnicianDashboard() {
       return;
     }
     setUser(current);
+    setIsOnline(current.technicianProfile?.isAvailable ?? false);
+    const loadJobs = async () => {
+      try {
+        const { data } = await apiClient.get('/bookings');
+        setJobs(data.map((booking: any) => ({
+          id: booking.id,
+          customerName: booking.customerName,
+          customerPhone: booking.customerPhone,
+          customerAddress: booking.address,
+          serviceType: booking.service,
+          scheduledTime: new Date(booking.scheduledAt).toLocaleString(),
+          status: booking.status,
+          amount: booking.amount,
+          notes: booking.description,
+          lat: booking.location?.lat ?? 0,
+          lng: booking.location?.lng ?? 0,
+        })));
+        setSelectedJobId((current: string) => current || data[0]?.id || '');
+      } catch {
+        setJobs([]);
+      }
+    };
+    loadJobs();
+    const interval = window.setInterval(loadJobs, 5000);
+    return () => window.clearInterval(interval);
   }, [navigate]);
+
+  useEffect(() => {
+    if (activeTab !== 'support' || !user?.id) return;
+    let cancelled = false;
+    const loadMessages = async () => {
+      try {
+        const messages = await fetchMessages(`support:${user.id}`);
+        if (!cancelled) setSupportMessages(messages);
+      } catch {
+        if (!cancelled) setSupportMessages([]);
+      }
+    };
+    loadMessages();
+    const interval = window.setInterval(loadMessages, 4000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [activeTab, user?.id]);
+
+  useEffect(() => {
+    if (activeTab !== 'messages' || !selectedJobId) return;
+    let cancelled = false;
+    const loadMessages = async () => {
+      try {
+        const messages = await fetchMessages(`booking:${selectedJobId}`);
+        if (!cancelled) setJobMessages(messages);
+      } catch {
+        if (!cancelled) setJobMessages([]);
+      }
+    };
+    loadMessages();
+    const interval = window.setInterval(loadMessages, 4000);
+    return () => { cancelled = true; window.clearInterval(interval); };
+  }, [activeTab, selectedJobId]);
+
+  useEffect(() => {
+    if (!user?.id || !locationBookingIds || !navigator.geolocation) return;
+    const bookingIds = locationBookingIds.split(',');
+    bookingIds.forEach(bookingId => socket.emit('booking:join', bookingId));
+    const watchId = navigator.geolocation.watchPosition(position => {
+      bookingIds.forEach(bookingId => socket.emit('location:update', {
+        technicianId: user.id,
+        bookingId,
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      }));
+    }, () => setSuccessMsg('Allow location access to share your live position with the customer.'), {
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+    });
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [user?.id, locationBookingIds]);
 
   const handleLogout = () => {
     logoutAdmin();
     navigate('/login');
   };
 
-  const updateJobStatus = (jobId: string, newStatus: Job['status']) => {
+  const updateJobStatus = async (jobId: string, newStatus: Job['status']) => {
     setStatusUpdating(true);
-    setTimeout(() => {
+    try {
+      await updateBookingStatus(jobId, newStatus);
       setJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: newStatus } : j));
-      setStatusUpdating(false);
       setSuccessMsg(`Job ${jobId} updated to ${newStatus.replace('_', ' ')}`);
-      setTimeout(() => setSuccessMsg(''), 3000);
-    }, 600);
+      window.setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (error: any) {
+      setSuccessMsg(error?.response?.data?.message || 'Could not update job status.');
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
+  const submitSupportMessage = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const body = supportInput.trim();
+    if (!body || !user?.id) return;
+    try {
+      const message = await sendMessage(`support:${user.id}`, body);
+      setSupportMessages(previous => [...previous, message]);
+      setSupportInput('');
+      setSupportError('');
+    } catch (error: any) {
+      setSupportError(error?.response?.data?.message || 'Could not send your message.');
+    }
+  };
+
+  const submitJobMessage = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const body = jobMessageInput.trim();
+    if (!body || !selectedJobId) return;
+    try {
+      const message = await sendMessage(`booking:${selectedJobId}`, body);
+      setJobMessages(previous => [...previous, message]);
+      setJobMessageInput('');
+    } catch (error: any) {
+      setSuccessMsg(error?.response?.data?.message || 'Message could not be sent.');
+    }
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -135,17 +195,20 @@ export default function TechnicianDashboard() {
   };
 
   const techProfile = user?.technicianProfile || {};
-  const verifiedId = user?.technicianVerifiedId || techProfile.technicianVerifiedId || 'TECH-VERIFIED-REG-2026';
-  const skillsList = techProfile.skills ? JSON.parse(techProfile.skills || '[]') : ['AC Repair', 'Electrical', 'Appliance Maintenance', 'Plumbing', 'Smart Home'];
+  const verifiedId = user?.technicianVerifiedId || techProfile.technicianVerifiedId || '';
+  const skillsList: string[] = techProfile.skills ? (() => { try { return JSON.parse(techProfile.skills); } catch { return []; } })() : [];
   const inProgressCount = jobs.filter(j => j.status === 'IN_PROGRESS' || j.status === 'ACCEPTED').length;
-  const todayEarnings = jobs.filter(j => j.status === 'COMPLETED').reduce((acc, j) => acc + j.amount, 0) + 1499;
+  const completedJobs = jobs.filter(j => j.status === 'COMPLETED');
+  const todayEarnings = completedJobs.reduce((acc, j) => acc + j.amount, 0);
 
   const navItems: { id: TabId; label: string; icon: any; badge?: string; badgeColor?: string; description: string }[] = [
-    { id: 'jobs', label: 'Dispatch Jobs', icon: Briefcase, badge: `${inProgressCount} Active`, badgeColor: 'bg-amber-500/20 text-amber-600 border-amber-500/30', description: 'View assigned field requests' },
+    { id: 'jobs', label: 'Dispatch Jobs', icon: Briefcase, badge: inProgressCount > 0 ? `${inProgressCount} Active` : 'No Jobs', badgeColor: 'bg-amber-500/20 text-amber-600 border-amber-500/30', description: 'View assigned field requests' },
+    { id: 'messages', label: 'Customer Chats', icon: MessageSquare, badge: jobs.length ? `${jobs.length}` : 'None', badgeColor: 'bg-blue-500/20 text-blue-600 border-blue-500/30', description: 'Reply to customers with assigned jobs' },
     { id: 'form', label: 'Service Report', icon: FileText, badge: 'Form', badgeColor: 'bg-sage-500/20 text-sage-700 border-sage-500/30', description: 'Submit service completion form' },
-    { id: 'earnings', label: 'Earnings & Payouts', icon: DollarSign, badge: `₹${todayEarnings}`, badgeColor: 'bg-emerald-500/20 text-emerald-600 border-emerald-500/30', description: 'Track income & payouts' },
-    { id: 'reviews', label: 'Customer Reviews', icon: Star, badge: '4.9★', badgeColor: 'bg-amber-500/20 text-amber-600 border-amber-500/30', description: 'Feedback from customers' },
-    { id: 'customers', label: 'Recent Customers', icon: Users, badge: '6 Recent', badgeColor: 'bg-blue-500/20 text-blue-600 border-blue-500/30', description: 'Recently contacted customers' },
+    { id: 'earnings', label: 'Earnings & Payouts', icon: DollarSign, badge: todayEarnings > 0 ? `₹${todayEarnings}` : '₹0', badgeColor: 'bg-emerald-500/20 text-emerald-600 border-emerald-500/30', description: 'Track income & payouts' },
+    { id: 'reviews', label: 'Customer Reviews', icon: Star, badge: 'Reviews', badgeColor: 'bg-amber-500/20 text-amber-600 border-amber-500/30', description: 'Feedback from customers' },
+    { id: 'customers', label: 'Recent Customers', icon: Users, badge: jobs.filter(j => j.status === 'COMPLETED').length > 0 ? `${jobs.filter(j => j.status === 'COMPLETED').length} Done` : 'None yet', badgeColor: 'bg-blue-500/20 text-blue-600 border-blue-500/30', description: 'Recently serviced customers' },
+    { id: 'support', label: 'Help & Support', icon: LifeBuoy, description: 'Contact FieldFix administrators' },
     { id: 'profile', label: 'Verified ID & Skills', icon: ShieldCheck, badge: 'Verified', badgeColor: 'bg-emerald-500/20 text-emerald-600 border-emerald-500/30', description: 'Credentials & specializations' },
     { id: 'settings', label: 'Settings', icon: Settings, description: 'Account & preferences' },
   ];
@@ -185,7 +248,15 @@ export default function TechnicianDashboard() {
           {sidebarOpen && (
             <div className="px-4 mt-4">
               <button
-                onClick={() => setIsOnline(!isOnline)}
+                onClick={async () => {
+                  const next = !isOnline;
+                  try {
+                    await apiClient.patch('/auth/technicians/availability', { isAvailable: next });
+                    setIsOnline(next);
+                  } catch {
+                    setSuccessMsg('Could not update your availability.');
+                  }
+                }}
                 className={`w-full flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl text-xs font-bold shadow-md transition active:scale-95 ${
                   isOnline
                     ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white'
@@ -435,6 +506,13 @@ export default function TechnicianDashboard() {
                     </div>
                   </div>
                 ))}
+                {jobs.length === 0 && (
+                  <div className="md:col-span-2 bg-white border border-sage-200 rounded-2xl p-14 text-center">
+                    <Briefcase className="w-12 h-12 mx-auto mb-4 text-sage-200" />
+                    <h3 className="font-bold text-sage-700">No assigned requests</h3>
+                    <p className="text-xs text-sage-500 mt-2">Customer requests assigned to your account will appear here.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -531,67 +609,65 @@ export default function TechnicianDashboard() {
                 <div className="bg-white border border-sage-200 p-5 rounded-2xl">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="p-2 rounded-lg bg-emerald-50"><DollarSign className="w-4 h-4 text-emerald-600" /></div>
-                    <span className="text-xs text-sage-500 font-semibold">Today</span>
+                    <span className="text-xs text-sage-500 font-semibold">Total Earned</span>
                   </div>
                   <p className="text-2xl font-bold text-sage-900">₹{todayEarnings}</p>
-                  <p className="text-[10px] text-emerald-600 font-medium mt-1">+12% from yesterday</p>
+                  <p className="text-[10px] text-sage-500 font-medium mt-1">{completedJobs.length} job{completedJobs.length !== 1 ? 's' : ''} completed</p>
                 </div>
                 <div className="bg-white border border-sage-200 p-5 rounded-2xl">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="p-2 rounded-lg bg-blue-50"><TrendingUp className="w-4 h-4 text-blue-600" /></div>
-                    <span className="text-xs text-sage-500 font-semibold">This Week</span>
+                    <span className="text-xs text-sage-500 font-semibold">Active Jobs</span>
                   </div>
-                  <p className="text-2xl font-bold text-sage-900">₹8,490</p>
-                  <p className="text-[10px] text-sage-500 font-medium mt-1">14 jobs completed</p>
+                  <p className="text-2xl font-bold text-sage-900">{inProgressCount}</p>
+                  <p className="text-[10px] text-sage-500 font-medium mt-1">In progress or accepted</p>
                 </div>
                 <div className="bg-white border border-sage-200 p-5 rounded-2xl">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="p-2 rounded-lg bg-purple-50"><Calendar className="w-4 h-4 text-purple-600" /></div>
-                    <span className="text-xs text-sage-500 font-semibold">This Month</span>
+                    <span className="text-xs text-sage-500 font-semibold">Total Jobs</span>
                   </div>
-                  <p className="text-2xl font-bold text-sage-900">₹32,750</p>
-                  <p className="text-[10px] text-sage-500 font-medium mt-1">52 jobs completed</p>
+                  <p className="text-2xl font-bold text-sage-900">{jobs.length}</p>
+                  <p className="text-[10px] text-sage-500 font-medium mt-1">All time assigned</p>
                 </div>
                 <div className="bg-white border border-sage-200 p-5 rounded-2xl">
                   <div className="flex items-center gap-2 mb-2">
                     <div className="p-2 rounded-lg bg-emerald-50"><CreditCard className="w-4 h-4 text-emerald-600" /></div>
                     <span className="text-xs text-sage-500 font-semibold">Bank Payout</span>
                   </div>
-                  <p className="text-sm font-semibold text-emerald-600 mt-2 flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4" /> Auto-Transfer Active
-                  </p>
-                  <p className="text-[10px] text-sage-500 font-medium mt-1">Next: Friday 6 PM</p>
+                  <p className="text-sm font-semibold text-sage-500 mt-2">Auto-transfer setup needed</p>
+                  <p className="text-[10px] text-sage-400 font-medium mt-1">Add bank details in Settings</p>
                 </div>
               </div>
 
-              {/* Payout History */}
+              {/* Payout History from actual completed jobs */}
               <div className="bg-white border border-sage-200 rounded-2xl p-6">
-                <h3 className="font-bold text-sm text-sage-800 mb-4">Recent Payout History</h3>
-                <div className="space-y-3">
-                  {[
-                    { id: 'PAY-101', date: 'Yesterday', job: 'AC Gas Charging — Ananya D.', amount: 1200, status: 'Credited' },
-                    { id: 'PAY-100', date: '29 Sep 2026', job: 'Geyser Heating Coil — Karan M.', amount: 950, status: 'Credited' },
-                    { id: 'PAY-099', date: '28 Sep 2026', job: 'Washing Machine Motor — Siddharth P.', amount: 1800, status: 'Credited' },
-                    { id: 'PAY-098', date: '27 Sep 2026', job: 'AC Installation — Deepika S.', amount: 2500, status: 'Credited' },
-                    { id: 'PAY-097', date: '26 Sep 2026', job: 'Electrical Panel Repair — Amit K.', amount: 1600, status: 'Credited' },
-                  ].map(p => (
-                    <div key={p.id} className="flex items-center justify-between bg-sage-50/60 p-4 rounded-xl border border-sage-200 text-xs hover:bg-sage-50 transition">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-lg bg-emerald-50">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <h3 className="font-bold text-sm text-sage-800 mb-4">Completed Job Payouts</h3>
+                {completedJobs.length === 0 ? (
+                  <div className="text-center py-10 text-sage-400">
+                    <DollarSign className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                    <p className="font-semibold text-sm">No earnings yet</p>
+                    <p className="text-xs mt-1">Completed jobs will appear here with their payout details</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {completedJobs.map(j => (
+                      <div key={j.id} className="flex items-center justify-between bg-sage-50/60 p-4 rounded-xl border border-sage-200 text-xs hover:bg-sage-50 transition">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-emerald-50"><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /></div>
+                          <div>
+                            <p className="font-semibold text-sage-900">{j.serviceType} — {j.customerName}</p>
+                            <p className="text-sage-500">{j.scheduledTime} • <span className="font-mono">{j.id}</span></p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-semibold text-sage-900">{p.job}</p>
-                          <p className="text-sage-500">{p.date} • <span className="font-mono">{p.id}</span></p>
+                        <div className="text-right">
+                          <p className="font-bold text-emerald-600 text-sm">+₹{j.amount}</p>
+                          <span className="text-emerald-500 text-[10px]">Credited</span>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-emerald-600 text-sm">+₹{p.amount}</p>
-                        <span className="text-emerald-500 text-[10px]">{p.status}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -602,45 +678,15 @@ export default function TechnicianDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-bold text-sage-900">Customer Feedback & Ratings</h2>
-                  <p className="text-xs text-sage-600">See what your customers say about your service</p>
-                </div>
-                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 px-4 py-2 rounded-xl">
-                  <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
-                  <span className="font-bold text-amber-700 text-lg">4.9</span>
-                  <span className="text-xs text-amber-600">(48 reviews)</span>
+                  <p className="text-xs text-sage-600">Reviews left by customers after completed services</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  { reviewer: 'Aarav Mehta', rating: 5, comment: 'Fixed AC in under an hour. Very professional and tidy work! Will definitely book again.', date: '2 days ago', service: 'AC Deep Cleaning' },
-                  { reviewer: 'Sneha Reddy', rating: 5, comment: 'Thorough gas recharge service. Explained everything before doing the repair. Very polite.', date: '1 week ago', service: 'AC Gas Refill' },
-                  { reviewer: 'Venkatesh K.', rating: 4, comment: 'On time and polite technician. Fixed the issue quickly. Recommended.', date: '2 weeks ago', service: 'Refrigerator Repair' },
-                  { reviewer: 'Priya Sharma', rating: 5, comment: 'Excellent service! Replaced the drain pump and also cleaned the filter. Very happy.', date: '3 weeks ago', service: 'Washing Machine Repair' },
-                  { reviewer: 'Ravi Kumar', rating: 5, comment: 'Smart home setup was seamless. Very knowledgeable about the products.', date: '1 month ago', service: 'Smart Home Setup' },
-                  { reviewer: 'Neha Joshi', rating: 4, comment: 'Good work on the electrical panel. Arrived on time and finished within estimate.', date: '1 month ago', service: 'Electrical Wiring' },
-                ].map((rev, idx) => (
-                  <div key={idx} className="bg-white p-5 rounded-2xl border border-sage-200 space-y-3 hover:shadow-md transition">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-sage-100 flex items-center justify-center text-sage-600 font-bold text-sm">
-                          {rev.reviewer.split(' ').map(n => n[0]).join('')}
-                        </div>
-                        <div>
-                          <span className="font-semibold text-sage-900 text-sm">{rev.reviewer}</span>
-                          <p className="text-[10px] text-sage-500">{rev.service}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-0.5 text-amber-400">
-                        {Array.from({ length: rev.rating }).map((_, i) => (
-                          <Star key={i} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-xs text-sage-700 italic leading-relaxed">"{rev.comment}"</p>
-                    <p className="text-[10px] text-sage-400 text-right">{rev.date}</p>
-                  </div>
-                ))}
+              {/* Empty state — reviews come from actual completed bookings */}
+              <div className="bg-white border border-sage-200 rounded-2xl p-16 text-center">
+                <Star className="w-12 h-12 mx-auto mb-4 text-sage-200" />
+                <h3 className="font-bold text-sage-700 text-base">No reviews yet</h3>
+                <p className="text-xs text-sage-400 mt-2 max-w-xs mx-auto">Customer reviews will appear here after you complete assigned jobs and customers rate your service.</p>
               </div>
             </div>
           )}
@@ -649,43 +695,105 @@ export default function TechnicianDashboard() {
           {activeTab === 'customers' && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-bold text-sage-900">Recently Contacted Customers</h2>
-                <p className="text-xs text-sage-600">Customers you've recently serviced or been in contact with</p>
+                <h2 className="text-xl font-bold text-sage-900">Recently Serviced Customers</h2>
+                <p className="text-xs text-sage-600">Customers from your completed and active jobs</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[
-                  { name: 'Priya Sharma', phone: '+91 98765 12345', email: 'priya@mail.com', address: '42 Indiranagar, Bangalore', lastService: 'AC Deep Cleaning', lastDate: 'Today', jobs: 3 },
-                  { name: 'Rahul Verma', phone: '+91 98765 67890', email: 'rahul@mail.com', address: '15 Koramangala, Bangalore', lastService: 'Refrigerator Repair', lastDate: 'Today', jobs: 1 },
-                  { name: 'Ananya Deshmukh', phone: '+91 98765 44332', email: 'ananya@mail.com', address: '88 HSR Layout, Bangalore', lastService: 'Washing Machine', lastDate: 'Yesterday', jobs: 2 },
-                  { name: 'Karan Malhotra', phone: '+91 98765 77788', email: 'karan@mail.com', address: '56 JP Nagar, Bangalore', lastService: 'Geyser Repair', lastDate: '29 Sep', jobs: 1 },
-                  { name: 'Siddharth Patel', phone: '+91 98765 99001', email: 'sid@mail.com', address: '23 BTM Layout, Bangalore', lastService: 'Motor Replacement', lastDate: '28 Sep', jobs: 2 },
-                  { name: 'Deepika Singh', phone: '+91 98765 22233', email: 'deepika@mail.com', address: '10 Marathahalli, Bangalore', lastService: 'AC Installation', lastDate: '27 Sep', jobs: 1 },
-                ].map((c, idx) => (
-                  <div key={idx} className="bg-white border border-sage-200 rounded-2xl p-5 space-y-3 hover:shadow-lg transition-all hover:border-sage-300">
-                    <div className="flex items-center gap-3">
-                      <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-sage-200 to-sage-300 flex items-center justify-center text-sage-700 font-bold text-sm shadow">
-                        {c.name.split(' ').map(n => n[0]).join('')}
+              {completedJobs.length === 0 && inProgressCount === 0 ? (
+                <div className="bg-white border border-sage-200 rounded-2xl p-16 text-center">
+                  <Users className="w-12 h-12 mx-auto mb-4 text-sage-200" />
+                  <h3 className="font-bold text-sage-700 text-base">No customers yet</h3>
+                  <p className="text-xs text-sage-400 mt-2 max-w-xs mx-auto">Customer details will appear here once you are assigned and complete jobs via the FieldFix platform.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {jobs.filter(j => j.status !== 'CANCELLED').map((j, idx) => (
+                    <div key={idx} className="bg-white border border-sage-200 rounded-2xl p-5 space-y-3 hover:shadow-lg transition-all hover:border-sage-300">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-sage-200 to-sage-300 flex items-center justify-center text-sage-700 font-bold text-sm shadow">
+                          {j.customerName.split(' ').map(n => n[0]).join('')}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-sage-900 text-sm">{j.customerName}</h3>
+                          <p className="text-[10px] text-sage-500">{j.serviceType}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-bold text-sage-900 text-sm">{c.name}</h3>
-                        <p className="text-[10px] text-sage-500">{c.jobs} service{c.jobs > 1 ? 's' : ''} completed</p>
+                      <div className="space-y-1.5 text-xs text-sage-600">
+                        <div className="flex items-center gap-2"><Phone className="w-3 h-3 text-sage-400" />{j.customerPhone}</div>
+                        <div className="flex items-start gap-2"><MapPin className="w-3 h-3 text-sage-400 mt-0.5" />{j.customerAddress}</div>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-sage-100 text-xs">
+                        <span className={`px-2 py-0.5 rounded-full font-semibold ${
+                          j.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
+                          j.status === 'IN_PROGRESS' ? 'bg-amber-50 text-amber-600 border border-amber-200' :
+                          'bg-blue-50 text-blue-600 border border-blue-200'
+                        }`}>{j.status.replace('_', ' ')}</span>
+                        <span className="text-sage-400">{j.scheduledTime}</span>
                       </div>
                     </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-                    <div className="space-y-1.5 text-xs text-sage-600">
-                      <div className="flex items-center gap-2"><Phone className="w-3 h-3 text-sage-400" />{c.phone}</div>
-                      <div className="flex items-center gap-2"><Mail className="w-3 h-3 text-sage-400" />{c.email}</div>
-                      <div className="flex items-start gap-2"><MapPin className="w-3 h-3 text-sage-400 mt-0.5" />{c.address}</div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-sage-100 text-xs">
-                      <span className="text-sage-500">Last: <span className="font-medium text-sage-700">{c.lastService}</span></span>
-                      <span className="text-sage-400">{c.lastDate}</span>
+          {activeTab === 'support' && (
+            <div className="max-w-2xl mx-auto bg-white border border-sage-200 rounded-2xl flex flex-col h-[min(70vh,620px)]">
+              <div className="p-5 border-b border-sage-100">
+                <h2 className="font-bold text-sage-900">FieldFix Admin Support</h2>
+                <p className="text-xs text-sage-500 mt-1">Messages here are visible to administrators in the support inbox.</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {supportMessages.map(message => (
+                  <div key={message.id} className={`flex ${message.senderId === user?.id ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-xs ${message.senderId === user?.id ? 'bg-emerald-700 text-white' : 'bg-sage-100 text-sage-800'}`}>
+                      <p className="font-semibold mb-1">{message.sender?.name || (message.senderId === user?.id ? 'You' : 'FieldFix Admin')}</p>
+                      <p>{message.body}</p>
+                      <p className="text-[10px] opacity-60 mt-1">{new Date(message.createdAt).toLocaleString()}</p>
                     </div>
                   </div>
                 ))}
+                {supportMessages.length === 0 && <p className="text-center text-xs text-sage-400 py-10">Start a conversation with the FieldFix admin team.</p>}
               </div>
+              <form onSubmit={submitSupportMessage} className="border-t border-sage-100 p-4 flex gap-2">
+                <input value={supportInput} onChange={event => setSupportInput(event.target.value)} placeholder="Message the admin team…" className="flex-1 border border-sage-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-emerald-600" />
+                <button disabled={!supportInput.trim()} className="px-4 rounded-xl bg-emerald-700 text-white disabled:opacity-50" aria-label="Send support message"><Send className="w-4 h-4" /></button>
+              </form>
+              {supportError && <p className="px-4 pb-3 text-xs text-rose-600">{supportError}</p>}
+            </div>
+          )}
+
+          {activeTab === 'messages' && (
+            <div className="max-w-4xl mx-auto overflow-hidden rounded-2xl border border-sage-200 bg-white">
+              <div className="border-b border-sage-100 p-5">
+                <h2 className="font-bold text-sage-900">Customer Conversations</h2>
+                <p className="text-xs text-sage-500 mt-1">Messages are shared with the customer and FieldFix administrators.</p>
+              </div>
+              {jobs.length === 0 ? <div className="p-14 text-center text-xs text-sage-400">Customer chats appear after a request is assigned to you.</div> : <div className="grid min-h-[460px] md:grid-cols-[240px_1fr]">
+                <div className="border-b border-sage-100 md:border-b-0 md:border-r">
+                  {jobs.map(job => <button key={job.id} onClick={() => setSelectedJobId(job.id)} className={`w-full border-b border-sage-100 p-4 text-left ${selectedJobId === job.id ? 'bg-emerald-50' : 'hover:bg-sage-50'}`}>
+                    <span className="block truncate text-xs font-bold text-sage-900">{job.customerName}</span>
+                    <span className="mt-1 block truncate text-[11px] text-sage-500">{job.serviceType}</span>
+                    <span className="mt-1 block text-[10px] text-sage-400">{job.status.replace('_', ' ')}</span>
+                  </button>)}
+                </div>
+                <div className="flex min-h-[440px] flex-col">
+                  <div className="flex-1 space-y-3 overflow-y-auto bg-sage-50/50 p-4">
+                    {jobMessages.map(message => <div key={message.id} className={`flex ${message.senderId === user?.id ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-xs ${message.senderId === user?.id ? 'bg-emerald-700 text-white' : 'bg-white text-sage-800 shadow-sm'}`}>
+                        <p className="mb-1 font-semibold">{message.senderId === user?.id ? 'You' : message.sender?.name || 'Customer'}</p>
+                        <p>{message.body}</p>
+                        <p className="mt-1 text-[10px] opacity-60">{new Date(message.createdAt).toLocaleString()}</p>
+                      </div>
+                    </div>)}
+                    {jobMessages.length === 0 && <p className="py-12 text-center text-xs text-sage-400">Send a message to start this conversation.</p>}
+                  </div>
+                  <form onSubmit={submitJobMessage} className="flex gap-2 border-t border-sage-100 p-4">
+                    <input value={jobMessageInput} onChange={event => setJobMessageInput(event.target.value)} placeholder="Message this customer…" className="min-w-0 flex-1 rounded-xl border border-sage-200 px-4 py-2.5 text-xs focus:border-emerald-600 focus:outline-none" />
+                    <button aria-label="Send customer message" disabled={!jobMessageInput.trim()} className="rounded-xl bg-emerald-700 px-4 text-white disabled:opacity-50"><Send className="h-4 w-4" /></button>
+                  </form>
+                </div>
+              </div>}
             </div>
           )}
 
@@ -707,8 +815,8 @@ export default function TechnicianDashboard() {
                     <h3 className="font-bold text-sage-900 text-lg">{user?.name || 'Technician'}</h3>
                     <p className="text-xs text-sage-600">{user?.email}</p>
                     <div className="flex items-center gap-1 mt-1 text-amber-500 text-xs font-semibold">
-                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                      <span>4.9 Rating (48 reviews)</span>
+                      <Star className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{techProfile.rating > 0 ? `${Number(techProfile.rating).toFixed(1)} rating` : 'No reviews yet'}</span>
                     </div>
                   </div>
                 </div>
@@ -716,19 +824,19 @@ export default function TechnicianDashboard() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                   <div className="bg-sage-50 p-3 rounded-xl border border-sage-200">
                     <span className="text-sage-500">City</span>
-                    <p className="font-semibold text-sage-800 mt-0.5">{techProfile.city || 'Bangalore'}</p>
+                    <p className="font-semibold text-sage-800 mt-0.5">{techProfile.city || '—'}</p>
                   </div>
                   <div className="bg-sage-50 p-3 rounded-xl border border-sage-200">
                     <span className="text-sage-500">Experience</span>
-                    <p className="font-semibold text-sage-800 mt-0.5">{techProfile.experienceYears || 5} Years</p>
+                    <p className="font-semibold text-sage-800 mt-0.5">{techProfile.experienceYears ? `${techProfile.experienceYears} yrs` : '—'}</p>
                   </div>
                   <div className="bg-sage-50 p-3 rounded-xl border border-sage-200">
                     <span className="text-sage-500">Total Jobs</span>
-                    <p className="font-semibold text-sage-800 mt-0.5">248</p>
+                    <p className="font-semibold text-sage-800 mt-0.5">{jobs.length}</p>
                   </div>
                   <div className="bg-sage-50 p-3 rounded-xl border border-sage-200">
-                    <span className="text-sage-500">Member Since</span>
-                    <p className="font-semibold text-sage-800 mt-0.5">Jan 2025</p>
+                    <span className="text-sage-500">Joined</span>
+                    <p className="font-semibold text-sage-800 mt-0.5">{user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}</p>
                   </div>
                 </div>
               </div>
@@ -799,7 +907,7 @@ export default function TechnicianDashboard() {
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-sage-600 mb-1">Phone</label>
-                      <input type="tel" defaultValue="+91 98765 XXXXX" className="w-full bg-sage-50 border border-sage-200 rounded-xl px-4 py-2.5 text-sm text-sage-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all" />
+                      <input type="tel" defaultValue={user?.phone || ''} className="w-full bg-sage-50 border border-sage-200 rounded-xl px-4 py-2.5 text-sm text-sage-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-sage-600 mb-1">City</label>
@@ -835,11 +943,11 @@ export default function TechnicianDashboard() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-sage-600 mb-1">Bank Name</label>
-                      <input type="text" defaultValue="State Bank of India" className="w-full bg-sage-50 border border-sage-200 rounded-xl px-4 py-2.5 text-sm text-sage-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all" />
+                      <input type="text" defaultValue="" className="w-full bg-sage-50 border border-sage-200 rounded-xl px-4 py-2.5 text-sm text-sage-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all" />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-sage-600 mb-1">Account Number</label>
-                      <input type="text" defaultValue="XXXX XXXX 4532" className="w-full bg-sage-50 border border-sage-200 rounded-xl px-4 py-2.5 text-sm text-sage-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all" />
+                      <input type="text" defaultValue="" className="w-full bg-sage-50 border border-sage-200 rounded-xl px-4 py-2.5 text-sm text-sage-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all" />
                     </div>
                   </div>
                 </div>

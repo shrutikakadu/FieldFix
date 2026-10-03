@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Wrench, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle,
-  Loader2, User, Phone, Settings, CheckCircle2, Shield, BadgeCheck
+  Loader2, User, Phone, CheckCircle2, Shield, BadgeCheck
 } from 'lucide-react';
 import { registerUser } from '../services/auth';
 
-type UserRole = 'CUSTOMER' | 'TECHNICIAN' | 'ADMIN';
+type UserRole = 'CUSTOMER' | 'TECHNICIAN';
 
 const SKILL_OPTIONS = [
   'AC & Cooling', 'Electrical', 'Plumbing', 'Appliances',
@@ -75,8 +75,7 @@ export default function RegisterPage() {
 
   const roles: { id: UserRole; icon: React.ElementType; label: string; desc: string }[] = [
     { id: 'CUSTOMER',   icon: User,        label: 'Customer',   desc: 'Book verified home services' },
-    { id: 'TECHNICIAN', icon: Wrench,      label: 'Technician', desc: 'Sign up & accept service jobs' },
-    { id: 'ADMIN',      icon: Settings,    label: 'Admin',      desc: 'Manage the platform' },
+    { id: 'TECHNICIAN', icon: Wrench,      label: 'Technician', desc: 'Register & accept service jobs' },
   ];
 
   return (
@@ -100,7 +99,7 @@ export default function RegisterPage() {
           {/* Role Selector */}
           <div className="mb-5">
             <label className="block text-xs font-bold text-sage-600 mb-3 uppercase tracking-wider">I want to join as</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {roles.map(r => {
                 const Icon = r.icon;
                 return (
@@ -254,7 +253,7 @@ export default function RegisterPage() {
               {isLoading ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /><span>Creating Account…</span></>
               ) : (
-                <><span>Create {selectedRole === 'ADMIN' ? 'Admin' : selectedRole === 'TECHNICIAN' ? 'Technician' : 'Customer'} Account</span><ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" /></>
+                <><span>Create {selectedRole === 'TECHNICIAN' ? 'Technician' : 'Customer'} Account</span><ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" /></>
               )}
             </button>
           </form>

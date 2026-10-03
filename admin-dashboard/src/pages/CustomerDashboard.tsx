@@ -6,9 +6,11 @@ import {
   Check, Download, BadgeCheck, Navigation, Home,
   LayoutDashboard, CalendarDays, FileText, Wallet, Settings,
   LogOut, Bell, ChevronDown, ArrowRight, Plus, Wind,
-  Zap, Droplets, Bug, Paintbrush, Hammer, Thermometer, Radio
+  Zap, Droplets, Bug, Paintbrush, Hammer, Thermometer, ChevronUp, Radio, LifeBuoy
 } from 'lucide-react';
 import { logoutAdmin, getStoredUser, getTechnicians } from '../services/auth';
+import { apiClient, createPaymentOrder, failPayment, fetchMessages, sendMessage, verifyPayment } from '../services/api';
+import { socket } from '../services/socket';
 
 declare global { interface Window { Razorpay: any; } }
 
@@ -25,99 +27,22 @@ const CATEGORIES = Object.keys(CAT_ICONS);
 const STATUS_STYLE: Record<string, string> = {
   'Scheduled': 'bg-blue-100 text-blue-700',
   'Confirmed': 'bg-emerald-100 text-emerald-700',
+  'Accepted': 'bg-emerald-100 text-emerald-700',
   'Pending': 'bg-amber-100 text-amber-700',
+  'Dispatched': 'bg-blue-100 text-blue-700',
   'Completed': 'bg-gray-100 text-gray-600',
   'In Progress': 'bg-orange-100 text-orange-700',
   'Cancelled': 'bg-red-100 text-red-700',
 };
 
-/* ── Static technician data (fallback when API unavailable) ── */
-const STATIC_TECHNICIANS = [
-  {
-    id: 'tech-1', user: { name: 'David Miller', phone: '+91 98765 43210', avatarUrl: null },
-    photoUrl: null, specialization: 'AC & Cooling Expert',
-    skills: JSON.stringify(['AC & Cooling', 'Appliances']),
-    bio: '12+ years in HVAC. Certified Samsung & LG technician. Quick diagnosis and lasting repairs.',
-    city: 'Bangalore', experienceYears: 12, rating: 4.9, totalJobs: 312,
-    isAvailable: true, technicianVerifiedId: 'TECH-KA-2021-0041',
-    currentLat: 12.9791, currentLng: 77.5913,
-    reviews: [
-      { reviewer: 'Aarav M.', rating: 5, comment: 'Fixed AC in under an hour. Very professional!', date: '2 days ago' },
-      { reviewer: 'Sneha R.', rating: 5, comment: 'Thorough gas recharge service. Explained everything.', date: '1 week ago' },
-    ],
-  },
-  {
-    id: 'tech-2', user: { name: 'Elena Rostova', phone: '+91 98765 43211', avatarUrl: null },
-    photoUrl: null, specialization: 'Electrical & Smart Home',
-    skills: JSON.stringify(['Electrical', 'Smart Home']),
-    bio: 'Licensed electrical engineer. Expert in smart home automation, EV charger installation and complex wiring.',
-    city: 'Bangalore', experienceYears: 9, rating: 4.8, totalJobs: 215,
-    isAvailable: true, technicianVerifiedId: 'TECH-KA-2019-0017',
-    currentLat: 12.9352, currentLng: 77.6245,
-    reviews: [
-      { reviewer: 'Vikram J.', rating: 5, comment: 'Configured 4 smart cameras in 2 hrs. Flawless!', date: '3 days ago' },
-      { reviewer: 'Priya S.', rating: 4.5, comment: 'Very knowledgeable about smart home systems.', date: '2 weeks ago' },
-    ],
-  },
-  {
-    id: 'tech-3', user: { name: 'Marcus Vance', phone: '+91 98765 43212', avatarUrl: null },
-    photoUrl: null, specialization: 'Plumbing Specialist',
-    skills: JSON.stringify(['Plumbing', 'Geyser & Water']),
-    bio: 'Master plumber with acoustic leak detection. No-damage wall diagnostics. 24/7 emergency available.',
-    city: 'Bangalore', experienceYears: 7, rating: 4.7, totalJobs: 178,
-    isAvailable: true, technicianVerifiedId: 'TECH-KA-2020-0089',
-    currentLat: 12.9165, currentLng: 77.6101,
-    reviews: [
-      { reviewer: 'Rahul K.', rating: 5, comment: 'Resolved severe clogging without wall damage. Clean work.', date: '5 days ago' },
-      { reviewer: 'Anita V.', rating: 4.8, comment: 'Found a hidden leak others missed. Excellent!', date: '1 week ago' },
-    ],
-  },
-  {
-    id: 'tech-4', user: { name: 'Riya Desai', phone: '+91 98765 43213', avatarUrl: null },
-    photoUrl: null, specialization: 'Deep Cleaning Expert',
-    skills: JSON.stringify(['Cleaning', 'Pest Control']),
-    bio: 'Trained in steam cleaning, eco-friendly chemicals. Specializes in post-construction & move-in cleans.',
-    city: 'Mumbai', experienceYears: 5, rating: 4.8, totalJobs: 134,
-    isAvailable: true, technicianVerifiedId: 'TECH-MH-2022-0034',
-    currentLat: 19.0760, currentLng: 72.8777,
-    reviews: [
-      { reviewer: 'Meera B.', rating: 5, comment: 'House sparkled after deep clean. Highly recommend!', date: '1 day ago' },
-    ],
-  },
-  {
-    id: 'tech-5', user: { name: 'Arjun Nair', phone: '+91 98765 43214', avatarUrl: null },
-    photoUrl: null, specialization: 'Carpentry & Interior Works',
-    skills: JSON.stringify(['Carpentry', 'Painting']),
-    bio: 'Expert in modular furniture assembly, custom woodwork, wall textures & interior painting.',
-    city: 'Bangalore', experienceYears: 11, rating: 4.6, totalJobs: 245,
-    isAvailable: false, technicianVerifiedId: 'TECH-KA-2018-0005',
-    currentLat: 12.9580, currentLng: 77.6370,
-    reviews: [
-      { reviewer: 'Suresh P.', rating: 5, comment: 'Built custom wardrobe. Perfect finish!', date: '1 week ago' },
-    ],
-  },
-  {
-    id: 'tech-6', user: { name: 'Priya Mehta', phone: '+91 98765 43215', avatarUrl: null },
-    photoUrl: null, specialization: 'Appliance Repair Specialist',
-    skills: JSON.stringify(['Appliances', 'AC & Cooling']),
-    bio: 'Certified Whirlpool & Bosch technician. 8 years repairing washing machines, refrigerators, dishwashers.',
-    city: 'Delhi NCR', experienceYears: 8, rating: 4.7, totalJobs: 198,
-    isAvailable: true, technicianVerifiedId: 'TECH-DL-2021-0062',
-    currentLat: 28.6139, currentLng: 77.2090,
-    reviews: [
-      { reviewer: 'Deepa R.', rating: 5, comment: 'Fixed washing machine in 30 mins. Great job!', date: '4 days ago' },
-    ],
-  },
-];
-
 interface Booking {
   id: string; techId: string; techName: string; techPhone: string;
   service: string; date: string; time: string;
   status: 'Scheduled' | 'Confirmed' | 'Pending' | 'Completed' | 'In Progress' | 'Cancelled';
-  amount: number; address: string; eta?: string; rating?: number;
+  amount: number; address: string; eta?: string; rating?: number; paymentStatus?: string; updatedAt?: string;
 }
 
-interface ChatMsg { id: string; sender: 'user' | 'tech' | 'bot'; text: string; time: string; }
+interface ChatMsg { id: string; sender: 'user' | 'tech' | 'admin' | 'bot'; text: string; time: string; }
 
 export default function CustomerDashboard() {
   const navigate = useNavigate();
@@ -129,8 +54,9 @@ export default function CustomerDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [city, setCity] = useState('Bangalore');
-  const [technicians, setTechnicians] = useState<any[]>(STATIC_TECHNICIANS);
+  const [technicians, setTechnicians] = useState<any[]>([]);
   const [loadingTechs, setLoadingTechs] = useState(false);
+  const [techError, setTechError] = useState('');
 
   /* ── Technician Profile Modal ── */
   const [profileTech, setProfileTech] = useState<any | null>(null);
@@ -138,41 +64,57 @@ export default function CustomerDashboard() {
   /* ── Booking form ── */
   const [bookingTech, setBookingTech] = useState<any | null>(null);
   const [bookingService, setBookingService] = useState('');
-  const [bookingDate, setBookingDate] = useState('2026-10-05');
+  const [bookingDate, setBookingDate] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() + 1);
+    return date.toISOString().slice(0, 10);
+  });
   const [bookingSlot, setBookingSlot] = useState('10:00 AM – 12:00 PM');
-  const [bookingAddress, setBookingAddress] = useState('Flat 402, Prestige Palms, Indiranagar, Bangalore');
+  const [bookingAddress, setBookingAddress] = useState('');
   const [bookingNotes, setBookingNotes] = useState('');
-  const [bookingPromo, setBookingPromo] = useState('');
-  const [discount, setDiscount] = useState(0);
   const [isBooking, setIsBooking] = useState(false);
+  const [bookingError, setBookingError] = useState('');
   const [successBooking, setSuccessBooking] = useState<Booking | null>(null);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const notificationStorageKey = `fieldfix_notifications_seen_at:${user?.id || 'guest'}`;
+  const [notificationsSeenAt, setNotificationsSeenAt] = useState(() => Number(localStorage.getItem(notificationStorageKey)) || 0);
 
-  /* ── Bookings list ── */
-  const [bookings, setBookings] = useState<Booking[]>([
-    { id: 'BK-9021', techId: 'tech-1', techName: 'David Miller', techPhone: '+91 98765 43210', service: 'AC Repair & Service', date: 'Oct 2, 2026', time: '10:00 AM – 12:00 PM', status: 'Scheduled', amount: 1850, address: 'Home – Bangalore', eta: '8 min' },
-    { id: 'BK-8998', techId: 'tech-3', techName: 'Marcus Vance', techPhone: '+91 98765 43212', service: 'Plumbing Service', date: 'Sep 26, 2026', time: '11:00 AM', status: 'Completed', amount: 780, address: 'Home – Bangalore', rating: 5 },
-  ]);
+  /* ── Bookings list ── (starts empty for new accounts) */
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const activeBooking = bookings.find(b => ['Pending', 'Accepted', 'Dispatched', 'In Progress'].includes(b.status));
 
   /* ── GPS tracking ── */
-  const [gpsProgress, setGpsProgress] = useState(30);
-  useEffect(() => { const t = setInterval(() => setGpsProgress(p => p >= 88 ? 20 : p + 2), 2800); return () => clearInterval(t); }, []);
+  const [technicianLocation, setTechnicianLocation] = useState<{ lat: number; lng: number; updatedAt: string } | null>(null);
+  useEffect(() => {
+    if (!activeBooking) {
+      setTechnicianLocation(null);
+      return;
+    }
+    socket.emit('booking:join', activeBooking.id);
+    const onLocation = (location: { bookingId: string; lat: number; lng: number }) => {
+      if (location.bookingId === activeBooking.id) {
+        setTechnicianLocation({ lat: location.lat, lng: location.lng, updatedAt: new Date().toLocaleTimeString() });
+      }
+    };
+    socket.on('location:live', onLocation);
+    return () => { socket.off('location:live', onLocation); };
+  }, [activeBooking?.id]);
 
-  /* ── Chat ── */
-  const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([
-    { id: '1', sender: 'tech', text: 'Hi! I am David, your assigned technician. ETA ~8 minutes.', time: '10:04 AM' },
-    { id: '2', sender: 'user', text: 'Thanks! AC outdoor unit is on the 2nd floor balcony.', time: '10:05 AM' },
-    { id: '3', sender: 'tech', text: 'Got it. I have spare capacitor & gas kit. See you soon!', time: '10:06 AM' },
-  ]);
+  /* ── Chat (technician messages) ── */
+  const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([]);
+  const [chatError, setChatError] = useState('');
+  const [sendingChat, setSendingChat] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMsgs]);
 
-  /* ── Bot ── */
+  /* ── AI Bot (floating) ── */
   const [botMsgs, setBotMsgs] = useState<ChatMsg[]>([
     { id: '1', sender: 'bot', text: '👋 Hi! I am the FieldFix AI. Search a service, ask about pricing, or describe your issue!', time: 'Now' },
   ]);
   const [botInput, setBotInput] = useState('');
   const [botTyping, setBotTyping] = useState(false);
+  const [botOpen, setBotOpen] = useState(false);
   const botEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => { botEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [botMsgs]);
 
@@ -184,29 +126,90 @@ export default function CustomerDashboard() {
   /* ── Invoice ── */
   const [invoiceTarget, setInvoiceTarget] = useState<Booking | null>(null);
 
-  /* ── Fetch technicians from API (with fallback to static) ── */
-  const fetchTechs = async (skill = '', cityFilter = '') => {
+  /* ── Fetch technicians from the API ── */
+  const fetchTechs = async (skill = '', cityFilter = '', name = '') => {
     setLoadingTechs(true);
+    setTechError('');
     try {
       const data = await getTechnicians({
         ...(skill ? { skill } : {}),
         ...(cityFilter ? { city: cityFilter } : {}),
+        ...(name ? { name } : {}),
       });
-      if (data && data.length > 0) setTechnicians(data);
-      else setTechnicians(STATIC_TECHNICIANS.filter(t => (!skill || JSON.parse(t.skills).some((s: string) => s.toLowerCase().includes(skill.toLowerCase()))) && (!cityFilter || t.city === cityFilter)));
-    } catch {
-      setTechnicians(STATIC_TECHNICIANS.filter(t => (!skill || JSON.parse(t.skills).some((s: string) => s.toLowerCase().includes(skill.toLowerCase()))) && (!cityFilter || t.city === cityFilter)));
+      setTechnicians(Array.isArray(data) ? data : []);
+    } catch (error: any) {
+      setTechnicians([]);
+      setTechError(error?.response?.data?.message || 'Could not load technicians. Check that the service is online.');
     } finally {
       setLoadingTechs(false);
     }
   };
+
+  const loadBookings = async () => {
+    try {
+      const { data } = await apiClient.get('/bookings');
+      setBookings(data.map((booking: any) => ({
+        id: booking.id,
+        techId: booking.technicianId || '',
+        techName: booking.technicianName,
+        techPhone: booking.technicianPhone,
+        service: booking.service,
+        date: new Date(booking.scheduledAt).toLocaleDateString(),
+        time: new Date(booking.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: booking.status.replaceAll('_', ' ').toLowerCase().replace(/\b\w/g, (letter: string) => letter.toUpperCase()),
+        amount: booking.amount,
+        address: booking.address,
+        paymentStatus: booking.paymentStatus,
+        updatedAt: booking.updatedAt,
+        eta: undefined,
+      })));
+    } catch {
+      setBookings([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchTechs('', city === 'All Cities' ? '' : city);
+    loadBookings();
+    const interval = window.setInterval(loadBookings, 5000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const threadId = section === 'support' ? `support:${user?.id}` : activeBooking ? `booking:${activeBooking.id}` : '';
+    if (!threadId || !['chat', 'support'].includes(section)) return;
+    let cancelled = false;
+    const loadMessages = async () => {
+      try {
+        const messages = await fetchMessages(threadId);
+        if (!cancelled) setChatMsgs(messages.map((message: any) => ({
+          id: message.id,
+          sender: message.senderId === user?.id ? 'user' : message.sender?.role === 'ADMIN' ? 'admin' : 'tech',
+          text: message.body,
+          time: new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        })));
+      } catch {
+        if (!cancelled) setChatMsgs([]);
+      }
+    };
+    loadMessages();
+    const poll = window.setInterval(loadMessages, 4000);
+    return () => { cancelled = true; window.clearInterval(poll); };
+  }, [section, activeBooking?.id, user?.id]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      fetchTechs(selectedCategory, searchQuery ? '' : city === 'All Cities' ? '' : city, searchQuery);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [selectedCategory, city, searchQuery]);
 
   /* ── Filter technicians in view ── */
   const filteredTechs = technicians.filter(t => {
     const skills: string[] = typeof t.skills === 'string' ? JSON.parse(t.skills) : t.skills || [];
     const matchSkill = !selectedCategory || skills.some(s => s === selectedCategory);
     const matchSearch = !searchQuery || t.user.name.toLowerCase().includes(searchQuery.toLowerCase()) || t.specialization?.toLowerCase().includes(searchQuery.toLowerCase()) || skills.some((s: string) => s.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchCity = !city || t.city === city || city === 'All Cities';
+    const matchCity = !city || t.city === city || city === 'All Cities' || Boolean(searchQuery);
     return matchSkill && matchSearch && matchCity;
   });
 
@@ -216,54 +219,131 @@ export default function CustomerDashboard() {
     const base: Record<string, number> = { 'AC & Cooling': 599, 'Electrical': 449, 'Plumbing': 399, 'Appliances': 349, 'Cleaning': 499, 'Carpentry': 549, 'Painting': 1499, 'Pest Control': 899, 'Smart Home': 999, 'Geyser & Water': 449 };
     return base[skills[0]] || 499;
   };
-  const activeBooking = bookings.find(b => ['Scheduled', 'In Progress'].includes(b.status));
-  const totalSpent = bookings.filter(b => b.status === 'Completed').reduce((a, b) => a + b.amount, 0);
+  const completedValue = bookings.filter(b => b.status === 'Completed').reduce((a, b) => a + b.amount, 0);
+  const chatPartnerName = section === 'support' ? 'FieldFix Support' : activeBooking?.techName || 'Technician';
+  const notifications = bookings.slice(0, 5);
+  const unreadNotifications = bookings.filter(booking => booking.updatedAt && new Date(booking.updatedAt).getTime() > notificationsSeenAt).length;
+  const markNotificationsRead = () => {
+    const seenAt = Date.now();
+    localStorage.setItem(notificationStorageKey, String(seenAt));
+    setNotificationsSeenAt(seenAt);
+  };
 
-  /* ── Razorpay payment ── */
-  const launchPayment = () => {
+  /* ── Request a technician ── */
+  const requestTechnician = async () => {
     if (!bookingTech) return;
+    if (!bookingAddress.trim()) {
+      setBookingError('Enter the service address before sending this request.');
+      return;
+    }
     setIsBooking(true);
+    setBookingError('');
     const skills: string[] = typeof bookingTech.skills === 'string' ? JSON.parse(bookingTech.skills) : bookingTech.skills || [];
-    const price = getServicePrice(skills);
-    const finalAmount = Math.max(0, price - discount);
     const service = bookingService || skills[0] || 'Home Service';
-
-    const doSuccess = () => {
-      const nb: Booking = {
-        id: `BK-${Math.floor(1000 + Math.random() * 9000)}`,
-        techId: bookingTech.id, techName: bookingTech.user.name, techPhone: bookingTech.user.phone,
-        service, date: bookingDate, time: bookingSlot,
-        status: 'Confirmed', amount: finalAmount, address: bookingAddress, eta: '18 min',
-      };
-      setBookings(prev => [nb, ...prev]);
-      setSuccessBooking(nb);
-      setBookingTech(null); setIsBooking(false); setBookingNotes(''); setBookingPromo(''); setDiscount(0);
-    };
-
-    if (window.Razorpay) {
-      const rzp = new window.Razorpay({
-        key: 'rzp_test_Seq6pkI96ruWHa', amount: finalAmount * 100, currency: 'INR',
-        name: 'FieldFix', description: `${service} by ${bookingTech.user.name}`,
-        prefill: { name: user?.name, email: user?.email },
-        theme: { color: '#2d5a27' },
-        handler: doSuccess,
+    const [time, period] = bookingSlot.split(' – ')[0].split(' ');
+    const [hours, minutes] = time.split(':').map(Number);
+    const appointment = new Date(`${bookingDate}T00:00:00`);
+    appointment.setHours((hours % 12) + (period === 'PM' ? 12 : 0), minutes);
+    try {
+      if (typeof window.Razorpay !== 'function') {
+        throw new Error('Razorpay checkout did not load. Check your connection and try again.');
+      }
+      const order = await createPaymentOrder({
+        technicianId: bookingTech.user.id,
+        service,
+        address: bookingAddress,
+        scheduledAt: appointment.toISOString(),
+        description: bookingNotes,
       });
-      rzp.on('payment.failed', () => setIsBooking(false));
-      rzp.open();
-    } else { setTimeout(doSuccess, 800); }
+
+      let checkoutHandled = false;
+      const cancelUnpaidOrder = async (message: string) => {
+        if (checkoutHandled) return;
+        checkoutHandled = true;
+        try { await failPayment(order.bookingId, order.orderId); } catch { /* The order expires unpaid if cancellation cannot be recorded. */ }
+        setBookingError(message);
+        setIsBooking(false);
+      };
+
+      const checkout = new window.Razorpay({
+        key: order.keyId,
+        amount: order.amount,
+        currency: order.currency,
+        name: 'FieldFix',
+        description: `${service} with ${bookingTech.user.name}`,
+        order_id: order.orderId,
+        prefill: { name: user?.name, email: user?.email, contact: user?.phone },
+        theme: { color: '#2d5a27' },
+        modal: { ondismiss: () => { void cancelUnpaidOrder('Payment cancelled. No booking request was sent to the technician.'); } },
+        handler: async (response: any) => {
+          if (checkoutHandled) return;
+          checkoutHandled = true;
+          try {
+            const result = await verifyPayment({
+              bookingId: order.bookingId,
+              orderId: response.razorpay_order_id,
+              paymentId: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+            });
+            const newBooking: Booking = {
+              id: result.id,
+              techId: result.technicianId,
+              techName: result.technicianName,
+              techPhone: result.technicianPhone,
+              service: result.service,
+              date: new Date(result.scheduledAt).toLocaleDateString(),
+              time: new Date(result.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              status: 'Pending',
+              amount: result.amount,
+              address: result.address,
+              paymentStatus: result.paymentStatus,
+              updatedAt: new Date().toISOString(),
+            };
+            setBookings(previous => [newBooking, ...previous]);
+            setSuccessBooking(newBooking);
+            setBookingTech(null);
+            setBookingNotes('');
+            setSection('bookings');
+          } catch (error: any) {
+            setBookingError(error?.response?.data?.message || 'Payment was submitted but could not be confirmed. Refresh bookings before trying again.');
+            await loadBookings();
+          } finally {
+            setIsBooking(false);
+          }
+        },
+      });
+      checkout.on('payment.failed', (event: any) => {
+        void cancelUnpaidOrder(event?.error?.description || 'Payment failed. Please try again.');
+      });
+      checkout.open();
+    } catch (error: any) {
+      setBookingError(error?.response?.data?.message || error?.message || 'Could not start the payment.');
+      setIsBooking(false);
+    }
   };
 
   /* ── Send chat ── */
-  const sendChat = (e: React.FormEvent) => {
+  const sendChat = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
-    const m: ChatMsg = { id: Date.now().toString(), sender: 'user', text: chatInput, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
-    setChatMsgs(p => [...p, m]);
-    setChatInput('');
-    setTimeout(() => {
-      const replies = ['Got it! On my way.', 'Thanks for letting me know.', 'Almost there — 5 minutes!'];
-      setChatMsgs(p => [...p, { id: Date.now() + 'r', sender: 'tech', text: replies[Math.floor(Math.random() * 3)], time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
-    }, 1200);
+    const body = chatInput.trim();
+    const threadId = section === 'support' ? `support:${user?.id}` : activeBooking ? `booking:${activeBooking.id}` : '';
+    if (!body || !threadId || sendingChat) return;
+    setSendingChat(true);
+    setChatError('');
+    try {
+      const message = await sendMessage(threadId, body);
+      setChatMsgs(previous => [...previous, {
+        id: message.id,
+        sender: 'user',
+        text: message.body,
+        time: new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }]);
+      setChatInput('');
+    } catch (error: any) {
+      setChatError(error?.response?.data?.message || 'Message could not be sent.');
+    } finally {
+      setSendingChat(false);
+    }
   };
 
   /* ── Send bot ── */
@@ -299,6 +379,7 @@ export default function CustomerDashboard() {
     { id: 'bookings', icon: CalendarDays,    label: 'My Bookings' },
     { id: 'tracker',  icon: Navigation,      label: 'Live Tracking' },
     { id: 'chat',     icon: MessageCircle,   label: 'Chat' },
+    { id: 'support',  icon: LifeBuoy,        label: 'Help & Support' },
     { id: 'invoices', icon: FileText,        label: 'Invoices' },
     { id: 'settings', icon: Settings,        label: 'Settings' },
   ];
@@ -326,14 +407,7 @@ export default function CustomerDashboard() {
             );
           })}
         </nav>
-        {/* AI Help box */}
-        <div className="mx-3 mb-3 p-3 bg-[#3d6b3d] rounded-xl">
-          <p className="text-white text-xs font-bold">Need help?</p>
-          <p className="text-white/60 text-[11px] mt-0.5">Ask our AI assistant</p>
-          <button onClick={() => setSection('chat')} className="mt-2 w-full py-1.5 bg-white/20 hover:bg-white/30 text-white text-[11px] font-bold rounded-lg flex items-center justify-center space-x-1.5 transition">
-            <Bot className="w-3.5 h-3.5" /><span>Chat with AI</span>
-          </button>
-        </div>
+
         <button onClick={() => { logoutAdmin(); navigate('/login', { replace: true }); }}
           className="flex items-center px-4 py-3 text-white/50 hover:text-white hover:bg-white/10 text-xs font-semibold transition border-t border-[#3d6b3d]">
           <LogOut className="w-4 h-4" /><span className="ml-3">Log out</span>
@@ -358,10 +432,28 @@ export default function CustomerDashboard() {
             </select>
             <ChevronDown className="w-3 h-3 text-gray-400" />
           </div>
-          <button className="relative p-2 rounded-xl hover:bg-gray-100 transition">
-            <Bell style={{ width: 18, height: 18 }} className="text-gray-500" />
-            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">2</span>
-          </button>
+          <div className="relative">
+            <button type="button" onClick={() => { setNotificationOpen(open => !open); markNotificationsRead(); }} aria-label="Notifications" aria-expanded={notificationOpen} className="relative p-2 rounded-xl hover:bg-gray-100 transition">
+              <Bell style={{ width: 18, height: 18 }} className="text-gray-500" />
+              {unreadNotifications > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{unreadNotifications > 9 ? '9+' : unreadNotifications}</span>}
+            </button>
+            {notificationOpen && <div role="dialog" aria-label="Notifications" className="absolute right-0 top-12 z-50 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+                <p className="text-xs font-bold text-gray-800">Notifications</p>
+                <button type="button" onClick={markNotificationsRead} className="text-[10px] font-semibold text-[#2d5a27] hover:underline">Mark all read</button>
+              </div>
+              {notifications.length ? <div className="max-h-80 overflow-y-auto">
+                {notifications.map(booking => <button type="button" key={booking.id} onClick={() => { markNotificationsRead(); setNotificationOpen(false); setSection('bookings'); }} className="block w-full border-b border-gray-50 px-4 py-3 text-left hover:bg-[#f5f8f4]">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-bold text-gray-800">{booking.service}</span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLE[booking.status] || 'bg-gray-100 text-gray-600'}`}>{booking.status}</span>
+                  </span>
+                  <span className="mt-1 block text-[11px] text-gray-500">{booking.techName} · {booking.date}</span>
+                  <span className="mt-1 block text-[10px] text-gray-400">{booking.paymentStatus === 'PAID' ? 'Payment received' : 'Booking update'} · {booking.id}</span>
+                </button>)}
+              </div> : <p className="px-4 py-8 text-center text-xs text-gray-400">No booking notifications yet.</p>}
+            </div>}
+          </div>
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 rounded-full bg-[#2d5a27] flex items-center justify-center text-white text-xs font-black">{getInitials(user?.name || 'SC')}</div>
             <div className="hidden sm:block">
@@ -405,9 +497,9 @@ export default function CustomerDashboard() {
                   {/* KPI strip */}
                   <div className="grid grid-cols-3 gap-4">
                     {[
-                      { label: 'Active bookings', value: bookings.filter(b => ['Scheduled','Confirmed','Pending'].includes(b.status)).length, icon: Radio, bg: '#dbeafe', ic: '#3b82f6' },
+                      { label: 'Active bookings', value: bookings.filter(b => ['Scheduled','Confirmed','Pending','Accepted','Dispatched','In Progress'].includes(b.status)).length, icon: Radio, bg: '#dbeafe', ic: '#3b82f6' },
                       { label: 'Completed', value: bookings.filter(b => b.status === 'Completed').length, icon: CheckCircle2, bg: '#d1fae5', ic: '#10b981' },
-                      { label: 'Total spent', value: `₹${totalSpent}`, icon: Wallet, bg: '#fef3c7', ic: '#f59e0b' },
+                      { label: 'Completed service value', value: `₹${completedValue}`, icon: Wallet, bg: '#fef3c7', ic: '#f59e0b' },
                     ].map(kpi => {
                       const Icon = kpi.icon;
                       return (
@@ -451,7 +543,7 @@ export default function CustomerDashboard() {
                           <h2 className="text-sm font-bold text-gray-800">Live Technician Tracking</h2>
                           <span className="text-xs text-emerald-600 font-semibold flex items-center space-x-1">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block"></span>
-                            <span>{activeBooking.techName} is on the way</span>
+                            <span>{activeBooking.status === 'Pending' ? 'Request sent, waiting for acceptance' : activeBooking.techName + ' is on the way'}</span>
                           </span>
                         </div>
                         <button onClick={() => setSection('tracker')} className="text-[11px] font-bold text-[#3d6b3d] hover:underline flex items-center space-x-1">
@@ -468,9 +560,7 @@ export default function CustomerDashboard() {
                           <div className="w-7 h-7 rounded-full bg-[#2d5a27] border-2 border-white shadow-md flex items-center justify-center"><Home className="w-3.5 h-3.5 text-white" /></div>
                           <span className="text-[10px] font-bold text-[#2d5a27] mt-1 bg-white px-1.5 py-0.5 rounded-md shadow-sm">You</span>
                         </div>
-                        <div className="absolute top-11 flex flex-col items-center transition-all duration-3000" style={{ left: `${gpsProgress}%` }}>
-                          <div className="w-7 h-7 rounded-full bg-amber-400 border-2 border-white shadow-md flex items-center justify-center text-[9px] font-black text-white">{getInitials(activeBooking.techName)}</div>
-                        </div>
+                        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-white px-3 py-2 text-center text-[10px] font-semibold text-gray-600 shadow">{technicianLocation ? `${technicianLocation.lat.toFixed(5)}, ${technicianLocation.lng.toFixed(5)}` : 'Waiting for live technician location'}</div>
                       </div>
                       <div className="px-4 pb-4 flex items-center justify-between">
                         <div className="flex items-center space-x-2">
@@ -494,26 +584,35 @@ export default function CustomerDashboard() {
                       <h2 className="text-sm font-bold text-gray-800">Recent Bookings</h2>
                       <button onClick={() => setSection('bookings')} className="text-[11px] font-bold text-[#3d6b3d] hover:underline">View All →</button>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left">
-                        <thead><tr className="border-t border-gray-100">{['ID','Service','Technician','Date','Status','Actions'].map(h => <th key={h} className="px-5 py-2.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">{h}</th>)}</tr></thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {bookings.slice(0, 3).map(b => (
-                            <tr key={b.id} className="hover:bg-gray-50 transition">
-                              <td className="px-5 py-3 text-xs font-mono font-bold text-[#3d6b3d]">{b.id}</td>
-                              <td className="px-5 py-3 text-xs font-medium text-gray-700">{b.service}</td>
-                              <td className="px-5 py-3 text-xs text-gray-600">{b.techName}</td>
-                              <td className="px-5 py-3 text-xs text-gray-500">{b.date}</td>
-                              <td className="px-5 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${STATUS_STYLE[b.status]}`}>{b.status}</span></td>
-                              <td className="px-5 py-3 flex items-center space-x-1.5">
-                                <button onClick={() => setInvoiceTarget(b)} className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[11px] font-semibold rounded-lg transition">Invoice</button>
-                                {b.status === 'Completed' && !b.rating && <button onClick={() => setReviewTarget(b)} className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-semibold rounded-lg hover:bg-amber-100 transition">Rate</button>}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    {bookings.length === 0 ? (
+                      <div className="px-5 py-10 text-center text-gray-400">
+                        <CalendarDays className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                        <p className="text-sm font-bold text-gray-500">No bookings yet</p>
+                        <p className="text-xs mt-1 mb-4">Your booking history will appear here</p>
+                        <button onClick={() => setSection('search')} className="px-4 py-2 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white text-xs font-bold rounded-xl transition">Book your first service</button>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                          <thead><tr className="border-t border-gray-100">{['ID','Service','Technician','Date','Status','Actions'].map(h => <th key={h} className="px-5 py-2.5 text-[11px] font-bold text-gray-400 uppercase tracking-wider">{h}</th>)}</tr></thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {bookings.slice(0, 3).map(b => (
+                              <tr key={b.id} className="hover:bg-gray-50 transition">
+                                <td className="px-5 py-3 text-xs font-mono font-bold text-[#3d6b3d]">{b.id}</td>
+                                <td className="px-5 py-3 text-xs font-medium text-gray-700">{b.service}</td>
+                                <td className="px-5 py-3 text-xs text-gray-600">{b.techName}</td>
+                                <td className="px-5 py-3 text-xs text-gray-500">{b.date}</td>
+                                <td className="px-5 py-3"><span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${STATUS_STYLE[b.status]}`}>{b.status}</span></td>
+                                <td className="px-5 py-3 flex items-center space-x-1.5">
+                                  <button onClick={() => setInvoiceTarget(b)} className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[11px] font-semibold rounded-lg transition">Invoice</button>
+                                  {b.status === 'Completed' && !b.rating && <button onClick={() => setReviewTarget(b)} className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-semibold rounded-lg hover:bg-amber-100 transition">Rate</button>}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -629,7 +728,7 @@ export default function CustomerDashboard() {
                       <div className="col-span-3 text-center py-16 text-gray-400">
                         <Wrench className="w-10 h-10 mx-auto mb-3 opacity-30" />
                         <p className="text-sm font-bold">No technicians found</p>
-                        <p className="text-xs mt-1">Try a different service or city</p>
+                        <p className="text-xs mt-1">{techError || 'Try a different service, name, or city'}</p>
                         <button onClick={() => { setSelectedCategory(''); setSearchQuery(''); }} className="mt-3 px-4 py-2 bg-[#2d5a27] text-white text-xs font-bold rounded-xl">Clear filters</button>
                       </div>
                     )}
@@ -676,8 +775,8 @@ export default function CustomerDashboard() {
                 <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                   <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                     <div><h2 className="text-sm font-bold text-gray-800">Live Technician Tracking</h2><p className="text-xs text-gray-400">Real-time GPS via Socket.IO</p></div>
-                    <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-700">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>GPS Live</span>
+                    <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-xl text-xs font-bold ${technicianLocation ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>
+                      <span className={`w-2 h-2 rounded-full ${technicianLocation ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`}></span><span>{technicianLocation ? 'GPS Live' : 'Waiting for GPS'}</span>
                     </div>
                   </div>
                   <div className="h-80 bg-[#eef4ec] relative overflow-hidden border-b border-gray-100">
@@ -695,14 +794,9 @@ export default function CustomerDashboard() {
                       <span key={lbl} className="absolute text-[10px] font-semibold text-[#4d7f4d] opacity-50" style={{ left: `${12 + i * 18}%`, top: i % 2 === 0 ? '18%' : '62%' }}>{lbl}</span>
                     ))}
                     {/* Moving technician */}
-                    <div className="absolute top-1/2 flex flex-col items-center transition-all duration-3000" style={{ left: `${gpsProgress}%`, transform: 'translate(-50%, -50%)' }}>
-                      <div className="px-2 py-0.5 bg-[#2d5a27] rounded-lg text-[10px] font-bold text-white shadow mb-1 flex items-center space-x-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-white/70 animate-pulse"></span>
-                        <span>{activeBooking ? activeBooking.techName : 'David M.'} (En Route)</span>
-                      </div>
-                      <div className="w-9 h-9 rounded-full bg-[#2d5a27] border-2 border-white shadow-lg flex items-center justify-center">
-                        <Navigation className="w-4 h-4 text-white rotate-45" />
-                      </div>
+                    <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white px-4 py-3 text-center shadow">
+                      <p className="text-xs font-bold text-gray-700">{activeBooking?.techName || 'No assigned technician'}</p>
+                      <p className="mt-1 text-[10px] text-gray-500">{technicianLocation ? `${technicianLocation.lat.toFixed(5)}, ${technicianLocation.lng.toFixed(5)} · ${technicianLocation.updatedAt}` : 'Live location appears after the technician shares GPS'}</p>
                     </div>
                     {/* Your location */}
                     <div className="absolute top-1/3 right-16 flex flex-col items-center">
@@ -737,64 +831,66 @@ export default function CustomerDashboard() {
                 </div>
               )}
 
-              {/* ══ CHAT ══ */}
-              {section === 'chat' && (
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-                  {/* Technician chat */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col h-[480px]">
-                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-full bg-[#2d5a27] flex items-center justify-center text-white font-black text-sm">DM</div>
-                        <div>
-                          <p className="text-xs font-bold text-gray-800">{activeBooking?.techName || 'David Miller'}</p>
-                          <p className="text-[11px] text-emerald-600 font-semibold flex items-center space-x-1"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>Technician · BK-9021</span></p>
+              {/* ══ CHAT (Technician only) ══ */}
+              {['chat', 'support'].includes(section) && (
+                <div className="max-w-2xl">
+                  {section === 'support' || activeBooking ? (
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col h-[520px]">
+                      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="relative">
+                            <div className="w-10 h-10 rounded-full bg-[#2d5a27] flex items-center justify-center text-white font-black text-sm">{getInitials(chatPartnerName)}</div>
+                            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></span>
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-gray-800">{chatPartnerName}</p>
+                            <p className="text-[11px] text-emerald-600 font-semibold flex items-center space-x-1"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span><span>{section === 'support' ? 'Admin support' : `Technician · ${activeBooking?.id}`}</span></p>
+                          </div>
                         </div>
+                        {section === 'chat' && activeBooking?.techPhone && <a href={`tel:${activeBooking.techPhone}`} className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition"><Phone className="w-4 h-4 text-gray-600" /></a>}
                       </div>
-                      <a href="tel:+919876543210" className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl"><Phone className="w-4 h-4 text-gray-600" /></a>
+                      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                        {chatMsgs.length === 0 && (
+                          <div className="flex flex-col items-center justify-center h-full text-center text-gray-400 py-8">
+                            <MessageCircle className="w-10 h-10 mb-3 opacity-25" />
+                            <p className="text-sm font-bold">Start the conversation</p>
+                            <p className="text-xs mt-1">Send a message to your assigned technician</p>
+                          </div>
+                        )}
+                        {chatMsgs.map(m => (
+                          <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}>
+                            {m.sender !== 'user' && <div className="w-7 h-7 rounded-full bg-[#2d5a27] flex items-center justify-center text-white text-[10px] font-black flex-shrink-0">{getInitials(m.sender === 'admin' ? 'FieldFix Admin' : chatPartnerName)}</div>}
+                            <div className="flex flex-col">
+                              {m.sender !== 'user' && <span className="text-[10px] text-gray-400 mb-0.5 ml-1">{m.sender === 'admin' ? 'FieldFix Admin' : chatPartnerName}</span>}
+                              <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-xs leading-relaxed ${m.sender === 'user' ? 'bg-[#2d5a27] text-white rounded-br-sm' : 'bg-gray-100 text-gray-700 rounded-bl-sm'}`}>{m.text}</div>
+                              <span className={`text-[10px] text-gray-400 mt-0.5 ${m.sender === 'user' ? 'text-right' : 'text-left ml-1'}`}>{m.time}</span>
+                            </div>
+                            {m.sender === 'user' && <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-[10px] font-black flex-shrink-0">{getInitials(user?.name || 'Me')}</div>}
+                          </div>
+                        ))}
+                        <div ref={chatEndRef} />
+                      </div>
+                      <div className="flex gap-2 overflow-x-auto px-4 py-2 border-t border-gray-100 text-[11px]">
+                        {["I'm at the gate","Please call before coming","Gate code: 4022"].map((chip, i) => <button key={i} onClick={() => setChatInput(chip)} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full whitespace-nowrap transition">{chip}</button>)}
+                      </div>
+                      <form onSubmit={sendChat} className="flex gap-2 p-4 border-t border-gray-100">
+                        <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Message your technician…" className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#2d5a27]" />
+                        <button type="submit" disabled={sendingChat || !chatInput.trim()} className="px-4 py-2.5 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white rounded-xl transition disabled:opacity-50"><Send className="w-4 h-4" /></button>
+                      </form>
+                      {chatError && <p className="px-4 pb-3 text-xs text-red-600">{chatError}</p>}
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                      {chatMsgs.map(m => (
-                        <div key={m.id} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
-                          <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-xs leading-relaxed ${m.sender === 'user' ? 'bg-[#2d5a27] text-white rounded-br-none' : 'bg-gray-100 text-gray-700 rounded-bl-none'}`}>{m.text}</div>
-                          <span className="text-[10px] text-gray-400 mt-1 px-1">{m.time}</span>
-                        </div>
-                      ))}
-                      <div ref={chatEndRef} />
+                  ) : (
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+                      <MessageCircle className="w-12 h-12 mx-auto mb-4 text-gray-200" />
+                      <h3 className="text-sm font-bold text-gray-700">No active booking</h3>
+                      <p className="text-xs text-gray-400 mt-1 mb-4">A technician conversation opens when you submit a service request.</p>
+                      <button onClick={() => setSection('search')} className="px-5 py-2.5 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white text-xs font-bold rounded-xl transition">Find a Technician</button>
                     </div>
-                    <div className="flex gap-2 overflow-x-auto px-4 py-2 border-t border-gray-100 text-[11px]">
-                      {["I'm at the gate","AC model: Samsung 1.5T","Gate code: 4022"].map((chip, i) => <button key={i} onClick={() => setChatInput(chip)} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full whitespace-nowrap transition">{chip}</button>)}
-                    </div>
-                    <form onSubmit={sendChat} className="flex gap-2 p-4 border-t border-gray-100">
-                      <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Type a message…" className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#2d5a27]" />
-                      <button type="submit" className="px-4 py-2.5 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white rounded-xl transition"><Send className="w-4 h-4" /></button>
-                    </form>
-                  </div>
-
-                  {/* AI Bot */}
-                  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col h-[480px]">
-                    <div className="px-5 py-4 border-b border-gray-100 flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-full bg-[#f0f7ee] border border-[#c8dfc6] flex items-center justify-center"><Bot className="w-5 h-5 text-[#3d6b3d]" /></div>
-                      <div><p className="text-xs font-bold text-gray-800">FieldFix AI Assistant</p><p className="text-[11px] text-gray-400">Ask about services, pricing, or your issue</p></div>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                      {botMsgs.map(m => (
-                        <div key={m.id} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
-                          <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-xs leading-relaxed ${m.sender === 'user' ? 'bg-[#2d5a27] text-white rounded-br-none' : 'bg-gray-100 text-gray-700 rounded-bl-none'}`}>{m.text}</div>
-                        </div>
-                      ))}
-                      {botTyping && <div className="flex space-x-1 px-2">{[0,1,2].map(i => <span key={i} className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: `${i * 100}ms` }}></span>)}</div>}
-                      <div ref={botEndRef} />
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 px-4 py-2 border-t border-gray-100">
-                      {['AC not cooling','Price estimate','Leak detection','Warranty policy'].map(chip => <button key={chip} onClick={() => setBotInput(chip)} className="px-2.5 py-1 bg-[#f0f7ee] text-[#3d6b3d] text-[11px] font-semibold rounded-lg hover:bg-[#d1f5d3] transition">{chip}</button>)}
-                    </div>
-                    <form onSubmit={sendBot} className="flex gap-2 p-4 border-t border-gray-100">
-                      <input value={botInput} onChange={e => setBotInput(e.target.value)} placeholder="Ask anything…" className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#2d5a27]" />
-                      <button type="submit" className="px-4 py-2.5 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white rounded-xl transition"><Send className="w-4 h-4" /></button>
-                    </form>
-                  </div>
+                  )}
                 </div>
               )}
+
+              {section === 'support' && !user?.id && <p className="text-xs text-red-600">Sign in again to contact support.</p>}
 
               {/* ══ INVOICES ══ */}
               {section === 'invoices' && (
@@ -841,29 +937,6 @@ export default function CustomerDashboard() {
 
             {/* ── RIGHT PANEL ── */}
             <aside className="hidden xl:flex w-72 flex-shrink-0 flex-col space-y-4">
-              {/* AI bot mini */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <div className="flex items-center space-x-2 mb-3">
-                  <div className="w-8 h-8 bg-[#f0f7ee] rounded-xl flex items-center justify-center"><Bot className="w-4 h-4 text-[#3d6b3d]" /></div>
-                  <div><p className="text-xs font-bold text-gray-800">AI Assistant</p><p className="text-[10px] text-gray-400">Instant answers</p></div>
-                </div>
-                <div className="max-h-32 overflow-y-auto space-y-2 mb-2">
-                  {botMsgs.slice(-3).map(m => (
-                    <div key={m.id} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
-                      <div className={`max-w-full px-3 py-2 rounded-xl text-[11px] leading-relaxed ${m.sender === 'user' ? 'bg-[#2d5a27] text-white' : 'bg-gray-100 text-gray-700'}`}>{m.text}</div>
-                    </div>
-                  ))}
-                  <div ref={botEndRef} />
-                </div>
-                <form onSubmit={sendBot} className="relative">
-                  <input value={botInput} onChange={e => setBotInput(e.target.value)} placeholder="Ask a question…" className="w-full border border-gray-200 rounded-xl pl-3 pr-10 py-2 text-[11px] focus:outline-none focus:border-[#2d5a27]" />
-                  <button type="submit" className="absolute right-2 top-1.5 p-1 bg-[#2d5a27] text-white rounded-lg"><Send className="w-3 h-3" /></button>
-                </form>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {['AC pricing','Warranty','Emergency'].map(chip => <button key={chip} onClick={() => setBotInput(chip)} className="px-2 py-1 bg-[#f0f7ee] text-[#3d6b3d] text-[10px] font-semibold rounded-lg hover:bg-[#d1f5d3] transition">{chip}</button>)}
-                </div>
-              </div>
-
               {/* Upcoming bookings */}
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
                 <div className="flex items-center justify-between mb-3">
@@ -871,7 +944,7 @@ export default function CustomerDashboard() {
                   <button onClick={() => setSection('bookings')} className="text-[11px] font-bold text-[#3d6b3d] hover:underline">All →</button>
                 </div>
                 <div className="space-y-2.5">
-                  {bookings.filter(b => ['Scheduled','Confirmed','Pending'].includes(b.status)).map(b => (
+                  {bookings.filter(b => ['Scheduled','Confirmed','Pending','Accepted','Dispatched','In Progress'].includes(b.status)).map(b => (
                     <div key={b.id} onClick={() => setInvoiceTarget(b)} className="flex items-center space-x-2.5 p-2.5 rounded-xl hover:bg-gray-50 transition cursor-pointer">
                       <div className="w-9 h-9 bg-[#f0f7ee] rounded-xl flex items-center justify-center flex-shrink-0"><Wrench className="w-4 h-4 text-[#3d6b3d]" /></div>
                       <div className="flex-1 min-w-0">
@@ -881,10 +954,11 @@ export default function CustomerDashboard() {
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${STATUS_STYLE[b.status]}`}>{b.status}</span>
                     </div>
                   ))}
-                  {bookings.filter(b => ['Scheduled','Confirmed','Pending'].includes(b.status)).length === 0 && (
-                    <div className="text-center py-4 text-gray-400 text-xs">
-                      <p>No upcoming bookings</p>
-                      <button onClick={() => setSection('search')} className="mt-2 text-[#3d6b3d] font-bold underline">Book a service</button>
+                  {bookings.filter(b => ['Scheduled','Confirmed','Pending','Accepted','Dispatched','In Progress'].includes(b.status)).length === 0 && (
+                    <div className="text-center py-6 text-gray-400">
+                      <CalendarDays className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                      <p className="text-xs font-semibold">No upcoming bookings</p>
+                      <button onClick={() => setSection('search')} className="mt-2 text-[11px] text-[#3d6b3d] font-bold underline">Book a service</button>
                     </div>
                   )}
                 </div>
@@ -904,6 +978,84 @@ export default function CustomerDashboard() {
             </aside>
           </div>
         </div>
+      </div>
+
+      {/* ═══ FLOATING AI ASSISTANT BUTTON ═══ */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end space-y-3">
+        {/* Floating chat popup */}
+        {botOpen && (
+          <div className="w-80 h-[440px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-200">
+            {/* Header */}
+            <div className="bg-[#2d5a27] px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                  <Bot className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-white text-xs font-bold">FieldFix AI</p>
+                  <p className="text-white/60 text-[10px]">Ask about services, pricing or your issue</p>
+                </div>
+              </div>
+              <button onClick={() => setBotOpen(false)} className="p-1 rounded-lg hover:bg-white/10 text-white/70 hover:text-white transition">
+                <ChevronUp className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2.5 bg-gray-50">
+              {botMsgs.map(m => (
+                <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  {m.sender !== 'user' && (
+                    <div className="w-6 h-6 rounded-full bg-[#2d5a27] flex items-center justify-center mr-1.5 flex-shrink-0 mt-0.5">
+                      <Bot className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                  <div className={`max-w-[78%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                    m.sender === 'user'
+                      ? 'bg-[#2d5a27] text-white rounded-br-sm'
+                      : 'bg-white text-gray-700 rounded-bl-sm border border-gray-100 shadow-sm'
+                  }`}>
+                    {m.text}
+                  </div>
+                </div>
+              ))}
+              {botTyping && (
+                <div className="flex items-center space-x-1.5 pl-8">
+                  {[0,1,2].map(i => <span key={i} className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: `${i * 100}ms` }}></span>)}
+                </div>
+              )}
+              <div ref={botEndRef} />
+            </div>
+            {/* Quick chips */}
+            <div className="flex gap-1.5 px-3 py-2 bg-white border-t border-gray-100 overflow-x-auto">
+              {['AC pricing','Warranty','Emergency','Plumbing'].map(chip => (
+                <button key={chip} onClick={() => setBotInput(chip)} className="px-2.5 py-1 bg-[#f0f7ee] text-[#3d6b3d] text-[10px] font-semibold rounded-lg hover:bg-[#c8dfc6] transition whitespace-nowrap flex-shrink-0">{chip}</button>
+              ))}
+            </div>
+            {/* Input */}
+            <form onSubmit={sendBot} className="flex gap-2 p-3 border-t border-gray-100 bg-white">
+              <input
+                value={botInput}
+                onChange={e => setBotInput(e.target.value)}
+                placeholder="Ask anything…"
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]"
+              />
+              <button type="submit" className="px-3 py-2 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white rounded-xl transition">
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            </form>
+          </div>
+        )}
+        {/* Floating button */}
+        <button
+          onClick={() => setBotOpen(o => !o)}
+          className="w-14 h-14 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white rounded-full shadow-lg hover:shadow-xl flex items-center justify-center transition-all active:scale-95 group relative"
+          title="FieldFix AI Assistant"
+        >
+          {botOpen ? <X className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
+          {!botOpen && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full border-2 border-white animate-pulse"></span>
+          )}
+        </button>
       </div>
 
       {/* ═══ MODALS ═══ */}
@@ -1017,7 +1169,6 @@ export default function CustomerDashboard() {
       {bookingTech && (() => {
         const skills: string[] = typeof bookingTech.skills === 'string' ? JSON.parse(bookingTech.skills) : bookingTech.skills || [];
         const price = getServicePrice(skills);
-        const finalAmount = Math.max(0, price - discount);
         return (
           <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-y-auto max-h-[92vh]">
@@ -1026,7 +1177,7 @@ export default function CustomerDashboard() {
                   <h3 className="text-sm font-black text-gray-800">Book Technician</h3>
                   <p className="text-[11px] text-gray-400">{bookingTech.user?.name} · {bookingTech.specialization}</p>
                 </div>
-                <button onClick={() => { setBookingTech(null); setDiscount(0); }} className="p-1.5 rounded-lg hover:bg-gray-100"><X className="w-4 h-4 text-gray-400" /></button>
+                <button onClick={() => setBookingTech(null)} className="p-1.5 rounded-lg hover:bg-gray-100"><X className="w-4 h-4 text-gray-400" /></button>
               </div>
               <div className="p-5 space-y-4">
                 {/* Service selector */}
@@ -1037,7 +1188,7 @@ export default function CustomerDashboard() {
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Date</label><input type="date" value={bookingDate} onChange={e => setBookingDate(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]" /></div>
+                  <div><label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Date</label><input type="date" min={new Date().toISOString().slice(0, 10)} value={bookingDate} onChange={e => setBookingDate(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]" /></div>
                   <div><label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Time Slot</label>
                     <select value={bookingSlot} onChange={e => setBookingSlot(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]">
                       {['10:00 AM – 12:00 PM','12:00 PM – 02:00 PM','02:00 PM – 04:00 PM','04:00 PM – 06:00 PM','06:00 PM – 08:00 PM'].map(s => <option key={s}>{s}</option>)}
@@ -1045,22 +1196,19 @@ export default function CustomerDashboard() {
                   </div>
                 </div>
                 <div><label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Service Address</label>
-                  <div className="relative"><MapPin className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" /><input value={bookingAddress} onChange={e => setBookingAddress(e.target.value)} className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]" /></div>
+                  <div className="relative"><MapPin className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" /><input required value={bookingAddress} onChange={e => setBookingAddress(e.target.value)} placeholder="Enter your service address" className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]" /></div>
                 </div>
                 <div><label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Problem Description</label>
                   <textarea rows={2} value={bookingNotes} onChange={e => setBookingNotes(e.target.value)} placeholder="Describe the issue…" className="w-full border border-gray-200 rounded-xl p-3 text-xs focus:outline-none focus:border-[#2d5a27] resize-none" />
                 </div>
-                <div className="flex gap-2">
-                  <input value={bookingPromo} onChange={e => setBookingPromo(e.target.value)} placeholder='Promo code (try "FIELDFIX100")' className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs uppercase focus:outline-none" />
-                  <button onClick={() => { if (['FIELDFIX100','WELCOME'].includes(bookingPromo.toUpperCase())) { setDiscount(100); } else alert('Invalid promo code.'); }} className="px-4 py-2 bg-gray-100 text-gray-600 text-xs font-bold rounded-xl hover:bg-gray-200 transition">Apply</button>
-                </div>
                 <div className="bg-[#f0f7ee] rounded-xl p-3 text-xs space-y-1">
-                  <div className="flex justify-between text-gray-500"><span>Base price</span><span>₹{price}</span></div>
-                  {discount > 0 && <div className="flex justify-between text-emerald-600"><span>Promo discount</span><span>-₹{discount}</span></div>}
-                  <div className="flex justify-between text-gray-800 font-black text-sm pt-1 border-t border-[#c8dfc6]"><span>Total</span><span className="text-[#2d5a27]">₹{finalAmount}</span></div>
+                  <div className="flex justify-between text-gray-500"><span>Estimated service price</span><span>₹{price}</span></div>
+                  <div className="flex justify-between text-gray-800 font-black text-sm pt-1 border-t border-[#c8dfc6]"><span>Pay now</span><span className="text-[#2d5a27]">₹{price}</span></div>
                 </div>
-                <button onClick={launchPayment} disabled={isBooking} className="w-full py-3 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white font-black text-sm rounded-xl shadow flex items-center justify-center space-x-2 transition disabled:opacity-60">
-                  <CreditCard className="w-4 h-4" /><span>{isBooking ? 'Processing…' : `Pay ₹${finalAmount} via Razorpay`}</span>
+                <p className="text-center text-[11px] text-gray-500">Secure payment by UPI, card, net banking, or wallet through Razorpay.</p>
+                {bookingError && <p className="text-xs text-red-600">{bookingError}</p>}
+                <button onClick={requestTechnician} disabled={isBooking || !bookingAddress.trim()} className="w-full py-3 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white font-black text-sm rounded-xl shadow flex items-center justify-center space-x-2 transition disabled:opacity-60">
+                  <CreditCard className="w-4 h-4" /><span>{isBooking ? 'Opening secure checkout…' : `Pay ₹${price} with Razorpay`}</span>
                 </button>
                 <div className="flex items-center justify-center space-x-4 text-[11px] text-gray-400 font-semibold">
                   <span className="flex items-center space-x-1"><Shield className="w-3 h-3" /><span>Verified tech</span></span>
@@ -1078,14 +1226,14 @@ export default function CustomerDashboard() {
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4">
             <div className="w-14 h-14 rounded-full bg-emerald-100 border-2 border-emerald-300 flex items-center justify-center text-emerald-600 mx-auto"><CheckCircle2 className="w-8 h-8" /></div>
-            <div><h3 className="text-lg font-black text-gray-800">Booking Confirmed! 🎉</h3><p className="text-xs text-gray-500 mt-1">Payment successful. Technician assigned.</p></div>
+            <div><h3 className="text-lg font-black text-gray-800">Payment received</h3><p className="text-xs text-gray-500 mt-1">Your paid request is now waiting for {successBooking.techName} to accept.</p></div>
             <div className="bg-[#f0f7ee] rounded-xl p-4 text-xs text-left space-y-2">
-              {[['Booking ID', successBooking.id],['Service', successBooking.service],['Technician', successBooking.techName],['Amount Paid', `₹${successBooking.amount}`]].map(([k, v]) => (
+              {[['Booking ID', successBooking.id],['Service', successBooking.service],['Technician', successBooking.techName],['Payment', `₹${successBooking.amount} · Paid`]].map(([k, v]) => (
                 <div key={k} className="flex justify-between"><span className="text-gray-500">{k}:</span><span className="font-bold text-gray-800">{v}</span></div>
               ))}
             </div>
             <div className="flex gap-2">
-              <button onClick={() => { setSuccessBooking(null); setSection('tracker'); }} className="flex-1 py-2.5 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white font-bold text-xs rounded-xl transition">Track Live →</button>
+              <button onClick={() => { setSuccessBooking(null); setSection('bookings'); }} className="flex-1 py-2.5 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white font-bold text-xs rounded-xl transition">View request</button>
               <button onClick={() => setSuccessBooking(null)} className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-xs rounded-xl transition">Close</button>
             </div>
           </div>
@@ -1102,7 +1250,7 @@ export default function CustomerDashboard() {
               <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${STATUS_STYLE[invoiceTarget.status]}`}>{invoiceTarget.status}</span>
             </div>
             <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-xs mb-4">
-              {[['Billed To', user?.name || 'Customer'],['Service', invoiceTarget.service],['Technician', invoiceTarget.techName],['Date', invoiceTarget.date],['Payment', 'Razorpay / UPI']].map(([k, v]) => (
+              {[['Billed To', user?.name || 'Customer'],['Service', invoiceTarget.service],['Technician', invoiceTarget.techName],['Date', invoiceTarget.date],['Payment', invoiceTarget.paymentStatus || 'UNPAID']].map(([k, v]) => (
                 <div key={k} className="flex justify-between"><span className="text-gray-500">{k}:</span><span className="font-semibold text-gray-800">{v}</span></div>
               ))}
               <div className="flex justify-between border-t border-gray-200 pt-2 text-sm font-black"><span>Total</span><span className="text-[#2d5a27]">₹{invoiceTarget.amount}</span></div>
