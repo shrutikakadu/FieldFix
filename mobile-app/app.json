@@ -5,14 +5,16 @@
     "entryPoint": "./index.js",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
+      "bundleIdentifier": "com.fieldfix.mobile",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.fieldfix.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#0f172a"
       }
@@ -22,10 +24,12 @@
       "output": "single"
     },
     "plugins": [
+      "expo-secure-store",
+      "expo-notifications",
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow FieldFix to use your location for live tracking technician dispatch."
+          "locationWhenInUsePermission": "Allow FieldFix to use your location for booking and technician tracking."
         }
       ]
     ]

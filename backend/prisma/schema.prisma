@@ -1,4 +1,4 @@
-// FieldFix Prisma Database Schema (SQLite for dev, swap to PostgreSQL for prod)
+// FieldFix PostgreSQL database schema.
 
 generator client {
   provider = "prisma-client-js"
@@ -9,9 +9,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// NOTE: SQLite doesn't support enums natively, so we use String fields
 // Role: "CUSTOMER" | "TECHNICIAN" | "ADMIN"
-// BookingStatus: "PENDING" | "ACCEPTED" | "DISPATCHED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
+// BookingStatus: "AWAITING_PAYMENT" | "PENDING" | "ACCEPTED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED"
 // PaymentStatus: "PENDING" | "PAID" | "REFUNDED" | "FAILED"
 
 model User {
@@ -32,6 +31,7 @@ model User {
   reviewsReceived  Review[]     @relation("ReviewsReceived")
   technicianProfile TechnicianProfile?
   chatMessages     ChatMessage[]
+  pushTokens       PushToken[]
 
   @@map("users")
 }
@@ -131,4 +131,17 @@ model ChatMessage {
 
   @@index([threadId, createdAt])
   @@map("chat_messages")
+}
+
+model PushToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  platform  String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("push_tokens")
 }

@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import { socket } from './socket';
 
 interface AuthResponse {
   token: string;
@@ -46,6 +47,7 @@ export const getTechnicians = async (params?: { skill?: string; city?: string; n
 };
 
 export const logoutAdmin = () => {
+  socket.disconnect();
   localStorage.removeItem('fieldfix_admin_token');
   localStorage.removeItem('fieldfix_admin_user');
 };

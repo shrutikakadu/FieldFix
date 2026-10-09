@@ -1,36 +1,49 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 import { authMiddleware, AuthRequest } from '../middleware/authMiddleware';
+import { createAuthToken, getJwtSecret } from '../authConfig';
 
 const router = Router();
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'fieldfix-jwt-secret-2026-shrutika';
-const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn'];
+const registerSchema = z.object({
+  name: z.string().trim().min(1, 'Name is required.').max(100, 'Name must be 100 characters or fewer.'),
+  email: z.string().trim().email('Enter a valid email address.').max(254).transform(value => value.toLowerCase()),
+  phone: z.string().trim().max(32).optional().default(''),
+  password: z.string().min(6, 'Password must be at least 6 characters.').refine(
+    value => Buffer.byteLength(value, 'utf8') <= 72,
+    'Password must be at most 72 bytes.',
+  ),
+  role: z.enum(['CUSTOMER', 'TECHNICIAN']).optional().default('CUSTOMER'),
+  technicianVerifiedId: z.string().trim().max(100).optional(),
+  skills: z.array(z.string().trim().min(1).max(100)).max(20).optional().default([]),
+  city: z.string().trim().max(100).optional().default('Bangalore'),
+});
+
+const loginSchema = z.object({
+  email: z.string().trim().email().max(254).transform(value => value.toLowerCase()),
+  password: z.string().min(1).max(1024),
+});
 
 // ==================== REGISTER ====================
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { name, email, phone, password, role, technicianVerifiedId, skills, city } = req.body;
-
-    // Basic validation
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Name, email, and password are required.' });
+    const parsed = registerSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid registration details.' });
     }
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const normalizedTechnicianId = String(technicianVerifiedId || '').trim().toUpperCase();
-
-    const validRoles = ['CUSTOMER', 'TECHNICIAN'];
-    const userRole = role || 'CUSTOMER';
-    if (!validRoles.includes(userRole)) {
-      return res.status(400).json({ message: 'Invalid role. Must be CUSTOMER, TECHNICIAN, or ADMIN.' });
-    }
+    getJwtSecret();
+    const { name, email: normalizedEmail, phone, password, role: userRole, skills, city } = parsed.data;
+    const normalizedTechnicianId = String(parsed.data.technicianVerifiedId || '').toUpperCase();
 
     // Technicians MUST provide a verified ID
     if (userRole === 'TECHNICIAN') {
       if (!normalizedTechnicianId || normalizedTechnicianId.length < 6) {
         return res.status(400).json({ message: 'A valid Government / Trade-Board Verified Technician ID is required to register as a technician.' });
+      }
+      if (skills.length === 0) {
+        return res.status(400).json({ message: 'Select at least one service skill to register as a technician.' });
       }
       // Check if verifiedId is already in use
       const existing = await prisma.technicianProfile.findUnique({ where: { technicianVerifiedId: normalizedTechnicianId } });
@@ -57,9 +70,9 @@ router.post('/register', async (req: Request, res: Response) => {
           data: {
             userId: createdUser.id,
             technicianVerifiedId: normalizedTechnicianId,
-            skills: skills ? JSON.stringify(Array.isArray(skills) ? skills : [skills]) : '[]',
-            specialization: Array.isArray(skills) && skills.length > 0 ? skills[0] : (skills || ''),
-            city: city || 'Bangalore',
+            skills: JSON.stringify(skills),
+            specialization: skills[0] || '',
+            city,
             isAvailable: true,
           },
         });
@@ -67,11 +80,7 @@ router.post('/register', async (req: Request, res: Response) => {
       return createdUser;
     });
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+    const token = createAuthToken(user);
 
     const technicianProfile = userRole === 'TECHNICIAN'
       ? await prisma.technicianProfile.findUnique({ where: { userId: user.id } })
@@ -83,7 +92,13 @@ router.post('/register', async (req: Request, res: Response) => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role, phone: user.phone, createdAt: user.createdAt, technicianProfile },
     });
   } catch (error: any) {
-    console.error('[Auth] Register error:', error.message);
+    if (error?.code === 'P2002') {
+      return res.status(409).json({ message: 'An account with those registration details already exists.' });
+    }
+    if (error instanceof Error && error.message.startsWith('JWT_SECRET must be configured')) {
+      return res.status(500).json({ message: 'Authentication is not configured on this server.' });
+    }
+    console.error('[Auth] Register error:', error instanceof Error ? error.message : error);
     res.status(500).json({ message: 'Server error during registration.' });
   }
 });
@@ -91,11 +106,12 @@ router.post('/register', async (req: Request, res: Response) => {
 // ==================== LOGIN ====================
 router.post('/login', async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password are required.' });
+    const parsed = loginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'A valid email and password are required.' });
     }
+    getJwtSecret();
+    const { email, password } = parsed.data;
 
     const user = await prisma.user.findUnique({
       where: { email: String(email).trim().toLowerCase() },
@@ -111,11 +127,7 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+    const token = createAuthToken(user);
 
     res.status(200).json({
       message: 'Login successful!',
@@ -130,7 +142,10 @@ router.post('/login', async (req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error('[Auth] Login error:', error.message);
+    if (error instanceof Error && error.message.startsWith('JWT_SECRET must be configured')) {
+      return res.status(500).json({ message: 'Authentication is not configured on this server.' });
+    }
+    console.error('[Auth] Login error:', error instanceof Error ? error.message : error);
     res.status(500).json({ message: 'Server error during login.' });
   }
 });
@@ -182,19 +197,11 @@ router.patch('/technicians/availability', authMiddleware, async (req: AuthReques
 });
 
 // ==================== GET CURRENT USER (ME) ====================
-router.get('/me', async (req: Request, res: Response) => {
+router.get('/me', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'Not authenticated.' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, JWT_SECRET) as { id: string; email: string; role: string };
-
     const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: { id: true, name: true, email: true, role: true, phone: true, createdAt: true },
+      where: { id: req.user!.id },
+      select: { id: true, name: true, email: true, role: true, phone: true, createdAt: true, technicianProfile: true },
     });
 
     if (!user) {
@@ -203,7 +210,8 @@ router.get('/me', async (req: Request, res: Response) => {
 
     res.status(200).json({ user });
   } catch (error: any) {
-    return res.status(401).json({ message: 'Invalid or expired token.' });
+    console.error('[Auth] Current user lookup failed:', error instanceof Error ? error.message : error);
+    return res.status(500).json({ message: 'Could not load the current user.' });
   }
 });
 

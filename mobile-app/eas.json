@@ -1,0 +1,35 @@
+{
+  "cli": {
+    "version": ">= 10.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "node": "18.18.0"
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "node": "18.18.0",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://fieldfix-api.onrender.com/api",
+        "EXPO_PUBLIC_SOCKET_URL": "https://fieldfix-api.onrender.com"
+      }
+    },
+    "production": {
+      "channel": "production",
+      "autoIncrement": true,
+      "node": "18.18.0",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://fieldfix-api.onrender.com/api",
+        "EXPO_PUBLIC_SOCKET_URL": "https://fieldfix-api.onrender.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

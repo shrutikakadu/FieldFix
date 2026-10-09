@@ -5,6 +5,7 @@ import {
   Loader2, User, Phone, CheckCircle2, Shield, BadgeCheck
 } from 'lucide-react';
 import { registerUser } from '../services/auth';
+import { connectAuthenticatedSocket } from '../services/socket';
 
 type UserRole = 'CUSTOMER' | 'TECHNICIAN';
 
@@ -62,6 +63,7 @@ export default function RegisterPage() {
 
       localStorage.setItem('fieldfix_admin_token', result.token);
       localStorage.setItem('fieldfix_admin_user', JSON.stringify(result.user));
+      connectAuthenticatedSocket();
 
       if (result.user.role === 'ADMIN') navigate('/admin/dashboard', { replace: true });
       else if (result.user.role === 'TECHNICIAN') navigate('/technician/dashboard', { replace: true });

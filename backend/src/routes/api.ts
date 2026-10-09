@@ -1,9 +1,49 @@
 import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
 import { authMiddleware, AuthRequest, requireRole } from '../middleware/authMiddleware';
+import { notifyBookingChange, notifyChatMessage } from '../services/realtime';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+const bookingInclude = {
+  customer: true,
+  technician: { include: { technicianProfile: true } },
+  category: true,
+  payment: true,
+} as const;
+
+const bookingUpdateSchema = z.object({
+  address: z.string().trim().min(1).max(500).optional(),
+  scheduledAt: z.string().datetime({ offset: true }).optional(),
+  description: z.string().trim().max(2000).optional(),
+}).strict().refine(value => Object.keys(value).length > 0, 'Provide at least one booking field to update.');
+
+const serializeBooking = (booking: any) => ({
+  id: booking.id,
+  customerId: booking.customerId,
+  customerName: booking.customer.name,
+  customerPhone: booking.customer.phone,
+  service: booking.category.name,
+  serviceType: booking.category.name,
+  status: booking.status,
+  technicianId: booking.technicianId,
+  technicianName: booking.technician?.name || 'Unassigned',
+  technicianPhone: booking.technician?.phone || '',
+  technicianEmail: booking.technician?.email || '',
+  technicianRating: booking.technician?.technicianProfile?.rating ?? 0,
+  address: booking.address,
+  description: booking.description,
+  location: { lat: booking.latitude, lng: booking.longitude },
+  amount: booking.totalAmount,
+  totalAmount: booking.totalAmount,
+  scheduledAt: booking.scheduledAt,
+  scheduledTime: booking.scheduledAt,
+  createdAt: booking.createdAt,
+  updatedAt: booking.updatedAt,
+  paymentStatus: booking.payment?.status || 'UNPAID',
+});
 
 // Health check endpoint
 router.get('/health', (req: Request, res: Response) => {
@@ -45,42 +85,108 @@ router.get('/bookings', authMiddleware, async (req: AuthRequest, res: Response) 
         : req.user?.role === 'TECHNICIAN'
           ? { technicianId: req.user.id }
           : { customerId: req.user?.id },
-      include: {
-        customer: true,
-        technician: { include: { technicianProfile: true } },
-        category: true,
-        payment: true,
-      },
+      include: bookingInclude,
       orderBy: { createdAt: 'desc' }
     });
 
-    const formatted = bookings.map(b => ({
-      id: b.id,
-      customerId: b.customerId,
-      customerName: b.customer.name,
-      customerPhone: b.customer.phone,
-      service: b.category.name,
-      serviceType: b.category.name,
-      status: b.status,
-      technicianId: b.technicianId,
-      technicianName: b.technician?.name || 'Unassigned',
-      technicianPhone: b.technician?.phone || '',
-      technicianEmail: b.technician?.email || '',
-      technicianRating: b.technician?.technicianProfile?.rating ?? 0,
-      address: b.address,
-      description: b.description,
-      location: { lat: b.latitude, lng: b.longitude },
-      amount: b.totalAmount,
-      totalAmount: b.totalAmount,
-      scheduledAt: b.scheduledAt,
-      scheduledTime: b.scheduledAt,
-      createdAt: b.createdAt,
-      updatedAt: b.updatedAt,
-      paymentStatus: b.payment?.status || 'UNPAID',
-    }));
-    res.status(200).json(formatted);
+    res.status(200).json(bookings.map(serializeBooking));
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch bookings' });
+  }
+});
+
+// Read one booking while keeping the same customer/technician/admin visibility rules as the list.
+router.get('/bookings/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const booking = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+      include: bookingInclude,
+    });
+    if (!booking) return res.status(404).json({ message: 'Booking not found.' });
+    if (
+      req.user!.role !== 'ADMIN' &&
+      booking.customerId !== req.user!.id &&
+      booking.technicianId !== req.user!.id
+    ) {
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+    res.json(serializeBooking(booking));
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch booking.' });
+  }
+});
+
+// Customers can adjust non-payment details only while the booking is awaiting payment.
+router.patch('/bookings/:id', authMiddleware, requireRole('CUSTOMER'), async (req: AuthRequest, res: Response) => {
+  const parsed = bookingUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid booking update.' });
+  }
+  if (parsed.data.scheduledAt && new Date(parsed.data.scheduledAt) <= new Date()) {
+    return res.status(400).json({ message: 'Appointment time must be in the future.' });
+  }
+
+  try {
+    const booking = await prisma.booking.findUnique({ where: { id: req.params.id }, include: { payment: true } });
+    if (!booking || booking.customerId !== req.user!.id) {
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+    if (booking.status !== 'AWAITING_PAYMENT' || (booking.payment && booking.payment.status !== 'PENDING')) {
+      return res.status(409).json({ message: 'Only bookings awaiting payment can be edited.' });
+    }
+
+    const updated = await prisma.booking.updateMany({
+      where: { id: booking.id, customerId: req.user!.id, status: 'AWAITING_PAYMENT' },
+      data: {
+        ...(parsed.data.address !== undefined ? { address: parsed.data.address } : {}),
+        ...(parsed.data.scheduledAt !== undefined ? { scheduledAt: new Date(parsed.data.scheduledAt) } : {}),
+        ...(parsed.data.description !== undefined ? { description: parsed.data.description } : {}),
+      },
+    });
+    if (updated.count !== 1) {
+      return res.status(409).json({ message: 'Booking status changed; reload before editing.' });
+    }
+
+    const result = await prisma.booking.findUnique({ where: { id: booking.id }, include: bookingInclude });
+    if (result) notifyBookingChange(result, 'Your booking details were updated.');
+    return res.json(serializeBooking(result));
+  } catch (error) {
+    console.error('[API] Booking update error:', error);
+    return res.status(500).json({ message: 'Failed to update booking.' });
+  }
+});
+
+// Soft-delete unpaid bookings so payment and conversation history remain auditable.
+router.delete('/bookings/:id', authMiddleware, requireRole('CUSTOMER'), async (req: AuthRequest, res: Response) => {
+  try {
+    const booking = await prisma.booking.findUnique({ where: { id: req.params.id }, include: { payment: true } });
+    if (!booking || booking.customerId !== req.user!.id) {
+      return res.status(404).json({ message: 'Booking not found.' });
+    }
+    if (booking.status !== 'AWAITING_PAYMENT' || (booking.payment && booking.payment.status !== 'PENDING')) {
+      return res.status(409).json({ message: 'Only bookings awaiting payment can be cancelled here.' });
+    }
+
+    const cancelled = await prisma.$transaction(async transaction => {
+      const result = await transaction.booking.updateMany({
+        where: { id: booking.id, customerId: req.user!.id, status: 'AWAITING_PAYMENT' },
+        data: { status: 'CANCELLED' },
+      });
+      if (result.count !== 1) return false;
+      await transaction.payment.updateMany({
+        where: { bookingId: booking.id, status: 'PENDING' },
+        data: { status: 'FAILED' },
+      });
+      return true;
+    });
+    if (!cancelled) {
+      return res.status(409).json({ message: 'Booking status changed; reload before cancelling.' });
+    }
+    notifyBookingChange({ ...booking, status: 'CANCELLED' }, 'Your unpaid booking was cancelled.', { notifyTechnician: false });
+    return res.json({ id: booking.id, status: 'CANCELLED' });
+  } catch (error) {
+    console.error('[API] Booking cancellation error:', error);
+    return res.status(500).json({ message: 'Failed to cancel booking.' });
   }
 });
 
@@ -101,21 +207,26 @@ router.patch('/bookings/:id/status', authMiddleware, requireRole('TECHNICIAN'), 
     }
 
     const updated = await prisma.$transaction(async transaction => {
-      const result = await transaction.booking.update({
-        where: { id: booking.id },
+      const result = await transaction.booking.updateMany({
+        where: { id: booking.id, technicianId: req.user!.id, status: booking.status },
         data: { status },
       });
+      if (result.count !== 1) throw new Error('BOOKING_STATE_CHANGED');
       if (status === 'COMPLETED') {
         await transaction.technicianProfile.update({
           where: { userId: req.user!.id },
           data: { totalJobs: { increment: 1 } },
         });
       }
-      return result;
+      return transaction.booking.findUniqueOrThrow({ where: { id: booking.id } });
     });
 
+    notifyBookingChange(updated, `Job status changed to ${updated.status.toLowerCase().replaceAll('_', ' ')}.`);
     res.json({ id: updated.id, status: updated.status });
   } catch (error) {
+    if (error instanceof Error && error.message === 'BOOKING_STATE_CHANGED') {
+      return res.status(409).json({ message: 'Booking status changed; refresh before trying again.' });
+    }
     console.error('[API] Booking status update error:', error);
     res.status(500).json({ message: 'Failed to update booking status.' });
   }
@@ -178,6 +289,39 @@ router.get('/messages/threads', authMiddleware, requireRole('ADMIN'), async (_re
   }
 });
 
+const pushTokenSchema = z.object({
+  token: z.string().min(10).max(512),
+  platform: z.enum(['ios', 'android']),
+}).strict();
+
+router.post('/notifications/push-token', authMiddleware, async (req: AuthRequest, res: Response) => {
+  const parsed = pushTokenSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ message: 'A valid Expo push token and platform are required.' });
+  try {
+    const { token, platform } = parsed.data;
+    await prisma.pushToken.upsert({
+      where: { token },
+      create: { token, platform, userId: req.user!.id },
+      update: { platform, userId: req.user!.id },
+    });
+    res.status(201).json({ registered: true });
+  } catch (error) {
+    console.error('[API] Push token registration error:', error);
+    res.status(500).json({ message: 'Could not register this device for notifications.' });
+  }
+});
+
+router.delete('/notifications/push-token', authMiddleware, async (req: AuthRequest, res: Response) => {
+  const token = String(req.body?.token || '');
+  if (!token) return res.status(400).json({ message: 'Push token is required.' });
+  try {
+    await prisma.pushToken.deleteMany({ where: { token, userId: req.user!.id } });
+    res.json({ removed: true });
+  } catch (error) {
+    res.status(500).json({ message: 'Could not unregister this device.' });
+  }
+});
+
 router.get('/messages', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const threadId = String(req.query.threadId || '');
@@ -209,6 +353,7 @@ router.post('/messages', authMiddleware, async (req: AuthRequest, res: Response)
       data: { threadId, senderId: req.user!.id, body },
       include: { sender: { select: { id: true, name: true, role: true } } },
     });
+    await notifyChatMessage(threadId, req.user!.id, message);
     res.status(201).json(message);
   } catch (error) {
     res.status(500).json({ message: 'Failed to send message.' });

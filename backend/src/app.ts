@@ -3,6 +3,7 @@ import cors from 'cors';
 import apiRouter from './routes/api';
 import authRouter from './routes/auth';
 import paymentsRouter from './routes/payments';
+import dispatchRouter from './routes/dispatch';
 
 const app: Express = express();
 
@@ -15,6 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api', apiRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/payments', paymentsRouter);
+app.use('/api/dispatch', dispatchRouter);
 
 
 // Global Error Handler

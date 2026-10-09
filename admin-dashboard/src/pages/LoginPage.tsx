@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Wrench, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, Loader2, User, Shield, Wrench as TechIcon } from 'lucide-react';
 import { loginAdmin } from '../services/auth';
+import { connectAuthenticatedSocket } from '../services/socket';
 
 type UserRole = 'CUSTOMER' | 'TECHNICIAN' | 'ADMIN';
 
@@ -49,6 +50,7 @@ export default function LoginPage() {
       // Store auth data
       localStorage.setItem('fieldfix_admin_token', response.token);
       localStorage.setItem('fieldfix_admin_user', JSON.stringify(response.user));
+      connectAuthenticatedSocket();
 
       // Redirect based on role
       if (response.user.role === 'ADMIN') {

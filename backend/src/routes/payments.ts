@@ -2,10 +2,35 @@ import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { Router, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import Razorpay from 'razorpay';
+import { z } from 'zod';
 import { authMiddleware, AuthRequest, requireRole } from '../middleware/authMiddleware';
+import { findDispatchCandidate } from '../services/dispatchService';
+import { notifyBookingChange } from '../services/realtime';
 
 const router = Router();
 const prisma = new PrismaClient();
+const orderSchema = z.object({
+  technicianId: z.string().min(1).optional(),
+  city: z.string().trim().min(1).max(100).optional(),
+  service: z.string().trim().min(1).max(100),
+  address: z.string().trim().min(1).max(500),
+  scheduledAt: z.string().datetime({ offset: true }),
+  description: z.string().trim().max(2000).optional().default(''),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+}).strict();
+
+const verifySchema = z.object({
+  bookingId: z.string().min(1),
+  orderId: z.string().min(1),
+  paymentId: z.string().min(1),
+  signature: z.string().regex(/^[a-f\d]{64}$/i),
+}).strict();
+
+const failSchema = z.object({
+  bookingId: z.string().min(1),
+  orderId: z.string().min(1),
+}).strict();
 const servicePrices: Record<string, number> = {
   'AC & Cooling': 599,
   Electrical: 449,
@@ -28,13 +53,27 @@ const razorpayClient = () => {
 
 router.post('/order', authMiddleware, requireRole('CUSTOMER'), async (req: AuthRequest, res: Response) => {
   try {
-    const { technicianId, service, address, scheduledAt, description } = req.body;
-    const serviceName = String(service || '').trim();
-    const serviceAddress = String(address || '').trim();
+    const parsed = orderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.issues[0]?.message || 'Invalid booking details.' });
+    }
+    const { service: serviceName, address: serviceAddress, scheduledAt, description, city, latitude, longitude } = parsed.data;
     const amount = servicePrices[serviceName];
     const appointment = new Date(scheduledAt);
-    if (!technicianId || !amount || !serviceAddress || Number.isNaN(appointment.getTime()) || appointment <= new Date()) {
-      return res.status(400).json({ message: 'Choose a valid service, address, technician, and future appointment time.' });
+    if (!amount || appointment <= new Date()) {
+      return res.status(400).json({ message: 'Choose a valid service and future appointment time.' });
+    }
+
+    let technicianId = parsed.data.technicianId;
+    if (!technicianId) {
+      if (!city) {
+        return res.status(400).json({ message: 'City is required when requesting automatic technician matching.' });
+      }
+      const candidate = await findDispatchCandidate(prisma, serviceName, city);
+      if (!candidate) {
+        return res.status(404).json({ message: 'No available technician offers this service in that city.' });
+      }
+      technicianId = candidate.id;
     }
 
     const technician = await prisma.user.findFirst({
@@ -77,8 +116,8 @@ router.post('/order', authMiddleware, requireRole('CUSTOMER'), async (req: AuthR
           technicianId: technician.id,
           categoryId: category.id,
           address: serviceAddress,
-          latitude: technician.technicianProfile!.currentLat ?? 12.9716,
-          longitude: technician.technicianProfile!.currentLng ?? 77.5946,
+          latitude: latitude ?? 12.9716,
+          longitude: longitude ?? 77.5946,
           scheduledAt: appointment,
           totalAmount: amount,
           description: String(description || '').trim(),
@@ -103,6 +142,7 @@ router.post('/order', authMiddleware, requireRole('CUSTOMER'), async (req: AuthR
       amount: order.amount,
       currency: order.currency,
       customer: { name: req.user!.email },
+      technician: { id: technician.id, name: technician.name, city: technician.technicianProfile.city },
     });
   } catch (error) {
     console.error('[Payments] Order creation failed:', error);
@@ -112,10 +152,11 @@ router.post('/order', authMiddleware, requireRole('CUSTOMER'), async (req: AuthR
 
 router.post('/verify', authMiddleware, requireRole('CUSTOMER'), async (req: AuthRequest, res: Response) => {
   try {
-    const { bookingId, orderId, paymentId, signature } = req.body;
-    if (!bookingId || !orderId || !paymentId || !signature) {
-      return res.status(400).json({ message: 'Razorpay payment details are incomplete.' });
+    const parsed = verifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: 'Razorpay payment details are incomplete or invalid.' });
     }
+    const { bookingId, orderId, paymentId, signature } = parsed.data;
     const pending = await prisma.payment.findFirst({
       where: {
         bookingId,
@@ -153,16 +194,25 @@ router.post('/verify', authMiddleware, requireRole('CUSTOMER'), async (req: Auth
     }
 
     const booking = await prisma.$transaction(async transaction => {
-      await transaction.payment.update({
-        where: { bookingId },
+      const activated = await transaction.booking.updateMany({
+        where: { id: bookingId, customerId: req.user!.id, status: 'AWAITING_PAYMENT' },
+        data: { status: 'PENDING' },
+      });
+      if (activated.count !== 1) throw new Error('BOOKING_STATE_CHANGED');
+
+      const paid = await transaction.payment.updateMany({
+        where: { bookingId, transactionId: orderId, status: 'PENDING' },
         data: { transactionId: paymentId, status: 'PAID' },
       });
-      return transaction.booking.update({
+      if (paid.count !== 1) throw new Error('PAYMENT_STATE_CHANGED');
+
+      return transaction.booking.findUniqueOrThrow({
         where: { id: bookingId },
-        data: { status: 'PENDING' },
         include: { customer: true, technician: true, category: true },
       });
     });
+
+    notifyBookingChange(booking, 'Payment confirmed. Your technician has received the job.');
 
     res.json({
       id: booking.id,
@@ -177,6 +227,9 @@ router.post('/verify', authMiddleware, requireRole('CUSTOMER'), async (req: Auth
       paymentStatus: 'PAID',
     });
   } catch (error) {
+    if (error instanceof Error && ['BOOKING_STATE_CHANGED', 'PAYMENT_STATE_CHANGED'].includes(error.message)) {
+      return res.status(409).json({ message: 'This booking or payment has already changed. Refresh your bookings.' });
+    }
     console.error('[Payments] Verification failed:', error);
     res.status(500).json({ message: 'Could not verify the Razorpay payment.' });
   }
@@ -184,17 +237,34 @@ router.post('/verify', authMiddleware, requireRole('CUSTOMER'), async (req: Auth
 
 router.post('/fail', authMiddleware, requireRole('CUSTOMER'), async (req: AuthRequest, res: Response) => {
   try {
-    const { bookingId, orderId } = req.body;
+    const parsed = failSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'Booking and order IDs are required.' });
+    const { bookingId, orderId } = parsed.data;
     const payment = await prisma.payment.findFirst({
       where: { bookingId, transactionId: orderId, status: 'PENDING', booking: { customerId: req.user!.id } },
     });
     if (!payment) return res.status(404).json({ message: 'Pending payment order not found.' });
-    await prisma.$transaction([
-      prisma.payment.update({ where: { bookingId }, data: { status: 'FAILED' } }),
-      prisma.booking.update({ where: { id: bookingId }, data: { status: 'CANCELLED' } }),
-    ]);
+    const cancelled = await prisma.$transaction(async transaction => {
+      const bookingUpdate = await transaction.booking.updateMany({
+        where: { id: bookingId, customerId: req.user!.id, status: 'AWAITING_PAYMENT' },
+        data: { status: 'CANCELLED' },
+      });
+      if (bookingUpdate.count !== 1) return false;
+      const paymentUpdate = await transaction.payment.updateMany({
+        where: { bookingId, transactionId: orderId, status: 'PENDING' },
+        data: { status: 'FAILED' },
+      });
+      if (paymentUpdate.count !== 1) throw new Error('PAYMENT_STATE_CHANGED');
+      return true;
+    });
+    if (!cancelled) return res.status(409).json({ message: 'Booking status has changed and can no longer be cancelled as unpaid.' });
+    const cancelledBooking = await prisma.booking.findUnique({ where: { id: bookingId }, select: { id: true, status: true, customerId: true, technicianId: true } });
+    if (cancelledBooking) notifyBookingChange(cancelledBooking, 'Your payment was not completed and the booking was cancelled.', { notifyTechnician: false });
     res.json({ message: 'Unpaid booking was cancelled.' });
   } catch (error) {
+    if (error instanceof Error && error.message === 'PAYMENT_STATE_CHANGED') {
+      return res.status(409).json({ message: 'Payment status changed and can no longer be cancelled as unpaid.' });
+    }
     res.status(500).json({ message: 'Could not cancel the unpaid booking.' });
   }
 });
