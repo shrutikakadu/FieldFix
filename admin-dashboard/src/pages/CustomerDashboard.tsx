@@ -386,7 +386,7 @@ export default function CustomerDashboard() {
 
   /* ═══════════════════════════════════════════════════════ */
   return (
-    <div className="flex h-screen bg-[#f5f7f4] font-sans overflow-hidden">
+    <div className="flex h-screen bg-[#f5f7f4] text-gray-900 font-sans overflow-hidden">
 
       {/* ═══ SIDEBAR ═══ */}
       <aside className="w-56 flex-shrink-0 bg-[#2d5a27] flex flex-col shadow-xl">
@@ -874,7 +874,7 @@ export default function CustomerDashboard() {
                         {["I'm at the gate","Please call before coming","Gate code: 4022"].map((chip, i) => <button key={i} onClick={() => setChatInput(chip)} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full whitespace-nowrap transition">{chip}</button>)}
                       </div>
                       <form onSubmit={sendChat} className="flex gap-2 p-4 border-t border-gray-100">
-                        <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Message your technician…" className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#2d5a27]" />
+                        <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Message your technician…" className="flex-1 bg-white text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-[#2d5a27] focus:ring-1 focus:ring-[#2d5a27]" />
                         <button type="submit" disabled={sendingChat || !chatInput.trim()} className="px-4 py-2.5 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white rounded-xl transition disabled:opacity-50"><Send className="w-4 h-4" /></button>
                       </form>
                       {chatError && <p className="px-4 pb-3 text-xs text-red-600">{chatError}</p>}
@@ -1037,7 +1037,7 @@ export default function CustomerDashboard() {
                 value={botInput}
                 onChange={e => setBotInput(e.target.value)}
                 placeholder="Ask anything…"
-                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]"
+                className="flex-1 bg-white text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27] focus:ring-1 focus:ring-[#2d5a27]"
               />
               <button type="submit" className="px-3 py-2 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white rounded-xl transition">
                 <Send className="w-3.5 h-3.5" />
@@ -1171,7 +1171,7 @@ export default function CustomerDashboard() {
         const price = getServicePrice(skills);
         return (
           <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-y-auto max-h-[92vh]">
+            <div className="bg-white text-gray-900 rounded-2xl max-w-md w-full shadow-2xl overflow-y-auto max-h-[92vh]">
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
                 <div>
                   <h3 className="text-sm font-black text-gray-800">Book Technician</h3>
@@ -1183,23 +1183,32 @@ export default function CustomerDashboard() {
                 {/* Service selector */}
                 <div>
                   <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Service Type</label>
-                  <select value={bookingService} onChange={e => setBookingService(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]">
-                    {skills.map(s => <option key={s}>{s}</option>)}
+                  <select value={bookingService} onChange={e => setBookingService(e.target.value)} className="w-full bg-white text-gray-900 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27] focus:ring-1 focus:ring-[#2d5a27]">
+                    {skills.map(s => <option key={s} value={s} className="bg-white text-gray-900">{s}</option>)}
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div><label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Date</label><input type="date" min={new Date().toISOString().slice(0, 10)} value={bookingDate} onChange={e => setBookingDate(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]" /></div>
-                  <div><label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Time Slot</label>
-                    <select value={bookingSlot} onChange={e => setBookingSlot(e.target.value)} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]">
-                      {['10:00 AM – 12:00 PM','12:00 PM – 02:00 PM','02:00 PM – 04:00 PM','04:00 PM – 06:00 PM','06:00 PM – 08:00 PM'].map(s => <option key={s}>{s}</option>)}
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Date</label>
+                    <input type="date" min={new Date().toISOString().slice(0, 10)} value={bookingDate} onChange={e => setBookingDate(e.target.value)} className="w-full bg-white text-gray-900 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27] focus:ring-1 focus:ring-[#2d5a27] [color-scheme:light]" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Time Slot</label>
+                    <select value={bookingSlot} onChange={e => setBookingSlot(e.target.value)} className="w-full bg-white text-gray-900 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27] focus:ring-1 focus:ring-[#2d5a27]">
+                      {['10:00 AM – 12:00 PM','12:00 PM – 02:00 PM','02:00 PM – 04:00 PM','04:00 PM – 06:00 PM','06:00 PM – 08:00 PM'].map(s => <option key={s} value={s} className="bg-white text-gray-900">{s}</option>)}
                     </select>
                   </div>
                 </div>
-                <div><label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Service Address</label>
-                  <div className="relative"><MapPin className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" /><input required value={bookingAddress} onChange={e => setBookingAddress(e.target.value)} placeholder="Enter your service address" className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27]" /></div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Service Address</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" />
+                    <input required value={bookingAddress} onChange={e => setBookingAddress(e.target.value)} placeholder="Enter your service address" className="w-full bg-white text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-[#2d5a27] focus:ring-1 focus:ring-[#2d5a27]" />
+                  </div>
                 </div>
-                <div><label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Problem Description</label>
-                  <textarea rows={2} value={bookingNotes} onChange={e => setBookingNotes(e.target.value)} placeholder="Describe the issue…" className="w-full border border-gray-200 rounded-xl p-3 text-xs focus:outline-none focus:border-[#2d5a27] resize-none" />
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1">Problem Description</label>
+                  <textarea rows={2} value={bookingNotes} onChange={e => setBookingNotes(e.target.value)} placeholder="Describe the issue…" className="w-full bg-white text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-xl p-3 text-xs focus:outline-none focus:border-[#2d5a27] focus:ring-1 focus:ring-[#2d5a27] resize-none" />
                 </div>
                 <div className="bg-[#f0f7ee] rounded-xl p-3 text-xs space-y-1">
                   <div className="flex justify-between text-gray-500"><span>Estimated service price</span><span>₹{price}</span></div>
@@ -1273,7 +1282,7 @@ export default function CustomerDashboard() {
               <div className="flex justify-center space-x-2 py-2">
                 {[1,2,3,4,5].map(s => <button key={s} type="button" onClick={() => setReviewRating(s)} className={`text-3xl transition ${s <= reviewRating ? 'text-amber-400 scale-110' : 'text-gray-200'}`}>★</button>)}
               </div>
-              <textarea rows={3} value={reviewComment} onChange={e => setReviewComment(e.target.value)} required placeholder="Share your experience…" className="w-full border border-gray-200 rounded-xl p-3 text-xs focus:outline-none focus:border-[#2d5a27] resize-none" />
+              <textarea rows={3} value={reviewComment} onChange={e => setReviewComment(e.target.value)} required placeholder="Share your experience…" className="w-full bg-white text-gray-900 placeholder:text-gray-400 border border-gray-200 rounded-xl p-3 text-xs focus:outline-none focus:border-[#2d5a27] focus:ring-1 focus:ring-[#2d5a27] resize-none" />
               <button type="submit" className="w-full py-2.5 bg-[#2d5a27] hover:bg-[#3d6b3d] text-white font-bold text-xs rounded-xl transition">Submit Review</button>
             </form>
           </div>
